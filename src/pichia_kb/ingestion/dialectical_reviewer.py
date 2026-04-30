@@ -1,0 +1,167 @@
+"""
+Cross-paper dialectical reviewer.
+
+Reads all per-paper extracted knowledge, groups findings by topic,
+then uses Gemini to identify consensus, contradictions, and synthesise
+evidence-weighted recommendations.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import textwrap
+from datetime import date
+from pathlib import Path
+
+from google import genai
+from google.genai import types
+
+from ..schema.dialectical import DialecticalReview
+
+
+_REVIEW_SYSTEM = textwrap.dedent("""
+You are a senior scientist and systematic reviewer specialising in Pichia pastoris
+bioprocess engineering and recombinant collagen production.
+
+Your task is to perform a rigorous cross-paper dialectical analysis:
+  1. Compare what multiple papers say about the same experimental topics.
+  2. Where papers AGREE → identify consensus, cite all supporting papers,
+     assess evidence strength, and state practical implications.
+  3. Where papers DISAGREE or give different values → identify the conflict,
+     explain the likely reason (different strains, scales, products, methods),
+     assess risk for experiment design, and suggest resolution.
+  4. Be quantitative wherever possible: include specific values from each paper.
+  5. Distinguish findings that are well-replicated from those based on a single
+     experiment.
+
+Return ONLY valid JSON. No markdown fences. No explanation outside JSON.
+""").strip()
+
+_REVIEW_PROMPT = textwrap.dedent("""
+Below is all the process control knowledge extracted from {n_papers} research papers
+on Pichia pastoris collagen expression. The papers cover: {paper_list}.
+
+Perform a dialectical cross-paper review. Identify the key experimental topics,
+then for each topic synthesize consensus and conflict across papers.
+
+Return a JSON object matching this schema exactly:
+
+{{
+  "papers_reviewed": ["paper1.pdf", "paper2.pdf", ...],
+  "review_date": "{today}",
+  "overall_summary": "2-3 sentence overview of the collective state of knowledge",
+  "highest_confidence_findings": [
+    "Finding 1 — cite papers",
+    "Finding 2 — cite papers"
+  ],
+  "most_uncertain_areas": [
+    "Uncertain area 1",
+    "Uncertain area 2"
+  ],
+  "topic_syntheses": [
+    {{
+      "topic_area": "e.g. Induction Temperature",
+      "summary": "What the literature collectively says on this topic",
+      "overall_confidence": "high|medium|low|conflicting|uncertain",
+      "key_uncertainties": ["uncertainty 1", "uncertainty 2"],
+      "actionable_recommendation": "Concrete guidance accounting for consensus and conflicts",
+      "consensus_points": [
+        {{
+          "topic": "specific sub-topic",
+          "consensus_claim": "unified statement all supporting papers agree on",
+          "recommended_value": "specific value or range",
+          "evidence_strength": "high|medium|low|conflicting|uncertain",
+          "applies_to": ["collagen", "general"],
+          "practical_implication": "what this means for experiment design",
+          "supporting_papers": [
+            {{
+              "paper": "filename.pdf",
+              "claim": "what this paper specifically says",
+              "value": "numeric value if any",
+              "experimental_context": "strain/product/scale used"
+            }}
+          ]
+        }}
+      ],
+      "conflict_points": [
+        {{
+          "topic": "specific sub-topic",
+          "divergence_explanation": "why results differ",
+          "risk_level": "high|medium|low",
+          "recommended_approach": "what to do given the conflict",
+          "open_questions": ["question to resolve this"],
+          "positions": [
+            {{
+              "paper": "filename.pdf",
+              "claim": "what this paper says",
+              "value": "value if any",
+              "experimental_context": "context"
+            }}
+          ]
+        }}
+      ]
+    }}
+  ]
+}}
+
+Cover at minimum these topic areas (add more if the data supports them):
+- Induction Temperature
+- pH Control
+- Dissolved Oxygen (DO)
+- Methanol Feed Strategy
+- P4H Co-expression for Hydroxylation
+- Proteolysis Prevention
+- Promoter Selection (AOX1 vs alternatives)
+- Copy Number and Genomic Integration
+- Product Yield and Titer
+
+=== EXTRACTED PROCESS KNOWLEDGE FROM ALL PAPERS ===
+
+{knowledge_dump}
+""").strip()
+
+
+class DialecticalReviewer:
+    """Performs cross-paper dialectical synthesis of process knowledge."""
+
+    def __init__(self, model: str = "gemini-2.5-pro") -> None:
+        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.model = model
+
+    def review(self, all_process_knowledge: list[dict]) -> DialecticalReview:
+        """
+        all_process_knowledge: list of per-paper dicts from structured_store.
+        Each dict has keys: source_file, control_principles, process_stages,
+        fermentation_protocols, troubleshooting, product_quality_factors.
+        """
+        papers = [e.get("source_file", "unknown") for e in all_process_knowledge]
+        knowledge_dump = json.dumps(all_process_knowledge, ensure_ascii=False, indent=2)
+
+        # Trim if too large (Gemini 2.5 Pro has large context, but be safe)
+        if len(knowledge_dump) > 80000:
+            knowledge_dump = knowledge_dump[:80000] + "\n... [truncated]"
+
+        prompt = _REVIEW_PROMPT.format(
+            n_papers=len(papers),
+            paper_list=", ".join(papers),
+            today=date.today().isoformat(),
+            knowledge_dump=knowledge_dump,
+        )
+
+        print(f"  Sending {len(knowledge_dump):,} chars to {self.model} for dialectical review...")
+        response = self.client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_REVIEW_SYSTEM,
+                max_output_tokens=16384,
+                temperature=0.15,
+            ),
+        )
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+
+        data = json.loads(raw)
+        return DialecticalReview(**data)

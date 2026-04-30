@@ -1,0 +1,19 @@
+# env / secrets
+.env
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+.venv/
+
+# macOS
+.DS_Store
+
+# data — copyrighted source PDFs and all derivatives kept out of public repo
+data/papers/
+data/figures/
+data/cache/
+data/db/
+data/structured/
