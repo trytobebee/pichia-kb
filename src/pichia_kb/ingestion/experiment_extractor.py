@@ -132,10 +132,27 @@ Read the paper's full text below and emit a JSON object with this schema:
 }}
 
 CRITICAL extraction guidance:
+- ONLY include experiments performed by the authors of THIS paper. Do NOT include
+  experiments described in the literature review, industry case studies cited from
+  third-party sources, or references to other groups' work. If a yield, strategy,
+  or outcome is attributed to "某厂家", "某公司", "literature reports",
+  "Smith et al.", a numbered reference like "[37]", a review of prior work, or a
+  general industry survey, it is a CITATION, not an experiment of this paper, and
+  must be EXCLUDED.
+- An ExperimentRun is a FERMENTATION / EXPRESSION run only. Do NOT create separate
+  ExperimentRuns for: downstream purification protocol comparisons (e.g. ammonium
+  sulfate saturation screens), bioactivity / cell-based assays (HUVEC proliferation,
+  migration, cell viability), animal toxicity tests (oral, percutaneous, etc.),
+  structural characterization assays (CD spectroscopy, mass spec, SEM), or
+  formulation studies. These belong inside a fermentation run's
+  `purification_method` / `analytical_methods` / `outcome.activity` fields, NOT as
+  standalone runs. The varied_parameters list of an ExperimentRun must describe
+  fermentation conditions only — never purification or assay parameters.
 - One experiment per distinct (varied parameter) combination. If the paper compares
   10 strains under the same conditions, that's ONE experiment with varied_parameters
   = ['菌株: 1-10']. If the paper then takes the best strain to 5 L bioreactor, that's
-  a SECOND experiment.
+  a SECOND experiment. If the paper varies methanol induction duration (0/24/48/72h)
+  in the SAME run, that's a single ExperimentRun with that variation listed.
 - For each experiment, look for figures whose caption or surrounding text matches the
   experimental conditions and add their figure_id to linked_figure_ids.
 - For phases: list them in temporal order. Even if the paper doesn't separate phases

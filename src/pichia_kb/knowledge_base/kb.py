@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from .vector_store import VectorStore
 from .structured_store import StructuredStore
 from ..schema import KnowledgeChunk, ExtractionResult
 from ..schema.dialectical import DialecticalReview
+
+
+def _count_hits(searchable: str, q_words: set[str]) -> int:
+    """Count how many distinct query words appear in a searchable string."""
+    return sum(1 for w in q_words if w in searchable)
+
+
+def _yield_to_numeric(yield_str: str | None) -> float:
+    """Extract first numeric value from a yield string for sorting (e.g. '18.7 g/L' → 18.7)."""
+    if not yield_str:
+        return 0.0
+    m = re.search(r"(\d+(?:\.\d+)?)", yield_str)
+    return float(m.group(1)) if m else 0.0
 
 
 class KnowledgeBase:
@@ -146,22 +160,26 @@ class KnowledgeBase:
             ]
 
         all_figs = self.structured_store.load_figures()
-        relevant_figs = []
+        scored_figs: list[tuple[int, dict]] = []
         for fig in all_figs:
             if fig.get("figure_type") not in _QUANT_TYPES:
                 continue
             searchable = " ".join([
+                fig.get("source_file", ""),
                 fig.get("caption", ""),
                 " ".join(_var_names(fig.get("independent_variables"))),
                 " ".join(_var_names(fig.get("dependent_variables"))),
                 fig.get("author_conclusion", ""),
                 fig.get("observed_trend", ""),
             ]).lower()
-            if any(w in searchable for w in q_words):
-                relevant_figs.append(fig)
-        if relevant_figs:
+            hits = _count_hits(searchable, q_words)
+            if hits:
+                scored_figs.append((hits, fig))
+        if scored_figs:
+            scored_figs.sort(key=lambda x: x[0], reverse=True)
+            relevant_figs = [fig for _, fig in scored_figs]
             fig_lines = []
-            for fig in relevant_figs[:5]:
+            for fig in relevant_figs[:8]:
                 src = fig.get("source_file", "")
                 fid = fig.get("figure_id", "")
                 x = ", ".join(_var_names(fig.get("independent_variables")))
@@ -225,7 +243,7 @@ class KnowledgeBase:
         # 6. Experiment protocols matching the query (Layer 6 → QA injection)
         all_paper_exps = self.structured_store.load_all_experiments()
         if all_paper_exps:
-            relevant_exps: list[tuple[str, object]] = []  # (short_paper, ExperimentRun)
+            scored_exps: list[tuple[int, float, str, object]] = []  # (hits, yield_num, paper_short, ExperimentRun)
             for paper in all_paper_exps:
                 paper_short = paper.source_file.split("_")[-1].replace(".pdf", "")
                 for exp in paper.experiments:
@@ -234,6 +252,8 @@ class KnowledgeBase:
                     setup = exp.setup
                     out = exp.outcome
                     searchable = " ".join(filter(None, [
+                        paper.source_file,
+                        paper_short,
                         exp.title or "",
                         exp.description or "",
                         exp.paper_section or "",
@@ -257,12 +277,17 @@ class KnowledgeBase:
                         out.max_wet_cell_weight or "",
                         out.productivity or "",
                     ])).lower()
-                    if any(w in searchable for w in q_words):
-                        relevant_exps.append((paper_short, exp))
+                    hits = _count_hits(searchable, q_words)
+                    if hits:
+                        scored_exps.append(
+                            (hits, _yield_to_numeric(out.max_yield), paper_short, exp)
+                        )
 
-            if relevant_exps:
+            if scored_exps:
+                # Rank by keyword hits desc, then by yield desc as tiebreaker
+                scored_exps.sort(key=lambda x: (x[0], x[1]), reverse=True)
                 exp_blocks = []
-                for paper_short, exp in relevant_exps[:5]:
+                for _, _, paper_short, exp in scored_exps[:10]:
                     g = exp.goal
                     sc = exp.strain_construct
                     setup = exp.setup
@@ -325,8 +350,13 @@ class KnowledgeBase:
 
             benchmarks = dk.get("yield_benchmarks", [])
             if benchmarks:
-                lines = [f"• {b.get('yield_value', '?')} — {b.get('protein', '')} ({b.get('expression_system', '')})" for b in benchmarks]
-                dk_parts.append("**Yield Benchmarks:**\n" + "\n".join(lines))
+                sorted_bm = sorted(
+                    benchmarks,
+                    key=lambda b: _yield_to_numeric(b.get("yield_value", "")),
+                    reverse=True,
+                )
+                lines = [f"• {b.get('yield_value', '?')} — {b.get('protein', '')} ({b.get('expression_system', '')})" for b in sorted_bm]
+                dk_parts.append("**Yield Benchmarks (sorted desc):**\n" + "\n".join(lines))
 
             conditions = dk.get("fermentation_conditions", [])
             if conditions:
