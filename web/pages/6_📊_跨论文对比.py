@@ -22,7 +22,7 @@ from _project import use_project_sidebar, current_kb, current_project_dir
 use_project_sidebar()
 DATA_DIR = current_project_dir()
 kb = current_kb()
-all_papers = kb.structured_store.load_all_experiments()
+all_papers = kb.structured_store.load_all_experiments(kb.schemas)
 
 st.title("📊 跨论文对比")
 st.caption("把 7 篇论文的 47 个发酵实验拉到同一张表上,按规模/宿主/启动子/产物筛选,并对感兴趣的实验做并列 diff。")

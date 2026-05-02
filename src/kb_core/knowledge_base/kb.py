@@ -9,7 +9,7 @@ from .vector_store import VectorStore
 from .structured_store import StructuredStore
 from ..schema import KnowledgeChunk
 from ..schema.dialectical import DialecticalReview
-from ..schema_engine import ExtractionResult
+from ..schema_engine import ExtractionResult, load_project_schemas
 
 
 def _count_hits(searchable: str, q_words: set[str]) -> int:
@@ -29,8 +29,16 @@ class KnowledgeBase:
     """Unified interface for a single project's knowledge: vector store + structured store."""
 
     def __init__(self, data_dir: Path) -> None:
+        self.data_dir = data_dir
         self.vector_store = VectorStore(db_path=data_dir / "db")
         self.structured_store = StructuredStore(store_path=data_dir / "structured")
+        self._schemas = None  # lazy
+
+    @property
+    def schemas(self):
+        if self._schemas is None:
+            self._schemas = load_project_schemas(self.data_dir)
+        return self._schemas
 
     # ── Ingestion ─────────────────────────────────────────────────────────────
 
@@ -242,7 +250,7 @@ class KnowledgeBase:
                 )
 
         # 6. Experiment protocols matching the query (Layer 6 → QA injection)
-        all_paper_exps = self.structured_store.load_all_experiments()
+        all_paper_exps = self.structured_store.load_all_experiments(self.schemas)
         if all_paper_exps:
             scored_exps: list[tuple[int, float, str, object]] = []  # (hits, yield_num, paper_short, ExperimentRun)
             for paper in all_paper_exps:

@@ -22,12 +22,10 @@ from typing import Any
 from google import genai
 from google.genai import types
 
-from ..schema.experiments import (
-    ExperimentLineageEdge,
-    ExperimentRun,
-    PaperExperiments,
-)
+from pydantic import BaseModel
+
 from ..config import DomainContext
+from ..schema_engine import PaperExperiments
 
 
 _LINEAGE_SYSTEM = textwrap.dedent("""
@@ -137,6 +135,7 @@ class LineageExtractor:
     def __init__(
         self,
         domain: DomainContext,
+        lineage_edge_cls: type[BaseModel],
         model: str = "gemini-2.5-pro",
         request_timeout_ms: int = 600_000,
     ) -> None:
@@ -146,9 +145,10 @@ class LineageExtractor:
         )
         self.model = model
         self.domain = domain
+        self.lineage_edge_cls = lineage_edge_cls
         self._system = _LINEAGE_SYSTEM.format(field_summary=domain.field_summary)
 
-    def extract(self, paper_exps: PaperExperiments) -> list[ExperimentLineageEdge]:
+    def extract(self, paper_exps: PaperExperiments) -> list:
         if len(paper_exps.experiments) < 2:
             return []
 
@@ -214,11 +214,11 @@ class LineageExtractor:
             return []
 
         edges_raw = data.get("edges") or []
-        edges: list[ExperimentLineageEdge] = []
+        edges: list = []
         seen: set[tuple[str, str]] = set()
         for raw_edge in edges_raw:
             try:
-                edge = ExperimentLineageEdge(**raw_edge)
+                edge = self.lineage_edge_cls(**raw_edge)
             except Exception as e:
                 print(f"  [warn] dropped invalid edge {raw_edge}: {e}", file=sys.stderr)
                 continue

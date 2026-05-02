@@ -1,0 +1,122 @@
+{
+  "system": "experiments",
+  "version": 1,
+  "entity_types": [
+    {
+      "name": "ExperimentRun",
+      "extraction_key": "experiments",
+      "description": "A single fermentation/expression experiment described in a paper.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "experiment_id", "type": "str", "required": true,
+         "description": "Paper-local id, e.g. 'wj-exp-01'. Stable for cross-references."},
+        {"name": "title", "type": "str", "required": true,
+         "description": "Short human-readable label."},
+        {"name": "description", "type": "str"},
+        {"name": "paper_section", "type": "str",
+         "description": "Paper section/chapter where this experiment is described."},
+
+        {"name": "goal", "type": "object",
+         "description": "What the experiment studies: what's held fixed, what varies, what's measured.",
+         "fields": [
+           {"name": "summary", "type": "str", "required": true,
+            "description": "One-sentence purpose of this experiment."},
+           {"name": "fixed_parameters", "type": "list", "item_type": "str",
+            "description": "Parameters held constant, e.g. ['温度=25°C', '菌株=10-Pp-Pr']"},
+           {"name": "varied_parameters", "type": "list", "item_type": "str",
+            "description": "Independent variable(s) being studied"},
+           {"name": "observation_targets", "type": "list", "item_type": "str",
+            "description": "Dependent variables observed, e.g. ['hlCOLIII产量', 'OD600']"}
+         ]},
+
+        {"name": "strain_construct", "type": "object",
+         "description": "Snapshot of strain + vector + product configuration used in this experiment.",
+         "fields": [
+           {"name": "host_strain", "type": "str",
+            "description": "e.g. GS115, X-33"},
+           {"name": "parent_strain", "type": "str"},
+           {"name": "expression_vector", "type": "str",
+            "description": "e.g. pPIC9K"},
+           {"name": "promoters", "type": "list", "item_type": "str",
+            "description": "One or more promoters, e.g. ['AOX1'] or ['AOX1', 'DAS2']"},
+           {"name": "signal_peptide", "type": "str",
+            "description": "e.g. MFα, OST1"},
+           {"name": "tag", "type": "str",
+            "description": "e.g. 6×His, FLAG"},
+           {"name": "selection", "type": "str"},
+           {"name": "target_products", "type": "list", "item_type": "str"},
+           {"name": "product_variants", "type": "list", "item_type": "str"},
+           {"name": "copy_number", "type": "str",
+            "description": "e.g. '10 copies'"}
+         ]},
+
+        {"name": "setup", "type": "object",
+         "description": "Scale + medium + inoculum configuration.",
+         "fields": [
+           {"name": "scale", "type": "str",
+            "description": "e.g. 5L bioreactor, 250mL shake flask"},
+           {"name": "initial_medium", "type": "str",
+            "description": "e.g. BSM, BMGY"},
+           {"name": "inoculum_percent", "type": "str"},
+           {"name": "inoculum_od600", "type": "str"},
+           {"name": "seed_culture_notes", "type": "str"}
+         ]},
+
+        {"name": "phases", "type": "list", "item_type": "object",
+         "description": "Process parameters per fermentation phase, in temporal order.",
+         "fields": [
+           {"name": "phase_name", "type": "str", "required": true,
+            "description": "Controlled vocabulary: glycerol_batch | glycerol_fed_batch | starvation | methanol_induction | shake_flask | seed_culture | harvest | other"},
+           {"name": "duration_hours", "type": "str"},
+           {"name": "temperature_celsius", "type": "str"},
+           {"name": "ph", "type": "str"},
+           {"name": "agitation_rpm", "type": "str"},
+           {"name": "aeration_vvm", "type": "str"},
+           {"name": "dissolved_oxygen_percent", "type": "str",
+            "description": "DO target, e.g. '>20%'"},
+           {"name": "feeding_strategy", "type": "str",
+            "description": "Carbon-source feed strategy"},
+           {"name": "notes", "type": "str"}
+         ]},
+
+        {"name": "outcome", "type": "object",
+         "description": "Reported quantitative outcomes of the experiment.",
+         "fields": [
+           {"name": "max_yield", "type": "str",
+            "description": "Reported peak product titer, e.g. '10.3 g/L'"},
+           {"name": "time_to_max_yield_hours", "type": "str",
+            "description": "When peak was observed, e.g. '120h'"},
+           {"name": "max_wet_cell_weight", "type": "str"},
+           {"name": "max_dry_cell_weight", "type": "str"},
+           {"name": "max_od600", "type": "str"},
+           {"name": "productivity", "type": "str"},
+           {"name": "purity", "type": "str"},
+           {"name": "activity", "type": "str"},
+           {"name": "other_results", "type": "list", "item_type": "str"}
+         ]},
+
+        {"name": "linked_figure_ids", "type": "list", "item_type": "str",
+         "description": "FigureData.figure_id values whose curves quantify this experiment."},
+        {"name": "purification_method", "type": "str",
+         "description": "Downstream purification, e.g. 'Ni-NTA → SEC → lyophilization'"},
+        {"name": "analytical_methods", "type": "list", "item_type": "str"}
+      ]
+    },
+
+    {
+      "name": "ExperimentLineageEdge",
+      "extraction_key": "lineage",
+      "description": "Directed edge: how one experiment derives from / builds on another within a paper.",
+      "fields": [
+        {"name": "from_id", "type": "str", "required": true,
+         "description": "Parent experiment_id (the one being built upon)."},
+        {"name": "to_id", "type": "str", "required": true,
+         "description": "Child experiment_id (the new/derived experiment)."},
+        {"name": "relation", "type": "str", "required": true,
+         "description": "Short label: derives_from | scales_up | applies_optimum | varies_parameter | replaces_component | branches | parallel"},
+        {"name": "summary", "type": "str", "required": true,
+         "description": "One-sentence description of how the child differs from the parent."}
+      ]
+    }
+  ]
+}

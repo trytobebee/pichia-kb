@@ -707,7 +707,7 @@ def refine_figures_cmd(
         figures_dir=data_dir / "figures", model=model, cache_dir=data_dir / "cache"
     )
 
-    all_papers = kb.structured_store.load_all_experiments()
+    all_papers = kb.structured_store.load_all_experiments(kb.schemas)
     targets = [p for p in all_papers if not paper or paper in p.source_file]
     if not targets:
         console.print(f"[yellow]No paper matches '{paper}'.[/yellow]")
@@ -802,8 +802,18 @@ def extract_experiments(
     """Extract structured experiment runs (parameter snapshots + outcome + figure links) from papers."""
     data_dir = _resolve_project(project)
     cfg = _load_cfg(data_dir)
+    schemas = _load_schemas(data_dir)
+    exp_cls = schemas.experiments_models.get("ExperimentRun")
+    if exp_cls is None:
+        console.print("[red]Project is missing schema/experiments.json with ExperimentRun.[/red]")
+        raise typer.Exit(1)
     kb = _get_kb(data_dir)
-    extractor = ExperimentExtractor(domain=cfg.domain, model=model, cache_dir=data_dir / "cache")
+    extractor = ExperimentExtractor(
+        domain=cfg.domain,
+        experiment_run_cls=exp_cls,
+        model=model,
+        cache_dir=data_dir / "cache",
+    )
 
     pdfs: list[Path] = sorted(pdf.glob("*.pdf")) if pdf.is_dir() else [pdf]
     if not pdfs:
@@ -840,10 +850,15 @@ def extract_lineage(
     """Extract intra-paper experiment lineage (parent → child edges) and persist on PaperExperiments."""
     data_dir = _resolve_project(project)
     cfg = _load_cfg(data_dir)
+    schemas = _load_schemas(data_dir)
+    lin_cls = schemas.experiments_models.get("ExperimentLineageEdge")
+    if lin_cls is None:
+        console.print("[red]Project is missing schema/experiments.json with ExperimentLineageEdge.[/red]")
+        raise typer.Exit(1)
     kb = _get_kb(data_dir)
-    extractor = LineageExtractor(domain=cfg.domain, model=model)
+    extractor = LineageExtractor(domain=cfg.domain, lineage_edge_cls=lin_cls, model=model)
 
-    all_papers = kb.structured_store.load_all_experiments()
+    all_papers = kb.structured_store.load_all_experiments(schemas)
     if not all_papers:
         console.print("[yellow]No experiments found. Run extract-experiments first.[/yellow]")
         raise typer.Exit(0)
@@ -884,7 +899,7 @@ def experiments(
     data_dir = _resolve_project(project)
     cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    all_papers = kb.structured_store.load_all_experiments()
+    all_papers = kb.structured_store.load_all_experiments(kb.schemas)
     if source:
         all_papers = [p for p in all_papers if source.lower() in p.source_file.lower()]
     if not all_papers:

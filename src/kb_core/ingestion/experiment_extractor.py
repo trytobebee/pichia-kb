@@ -23,11 +23,10 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
-from ..schema.experiments import (
-    ExperimentRun, ExperimentGoal, StrainConstruct,
-    FermentationSetup, PhaseParams, ExperimentOutcome, PaperExperiments,
-)
+from pydantic import BaseModel
+
 from ..config import DomainContext
+from ..schema_engine import PaperExperiments
 from .pdf_text import read_pdf_text
 
 
@@ -172,6 +171,7 @@ class ExperimentExtractor:
     def __init__(
         self,
         domain: DomainContext,
+        experiment_run_cls: type[BaseModel],
         model: str = "gemini-2.5-pro",
         cache_dir: Path | None = None,
         max_text_chars: int = 200_000,
@@ -185,6 +185,7 @@ class ExperimentExtractor:
         self.cache_dir = cache_dir
         self.max_text_chars = max_text_chars
         self.domain = domain
+        self.experiment_run_cls = experiment_run_cls
         self._system = _EXPERIMENT_SYSTEM.format(field_summary=domain.field_summary)
 
     def extract_from_pdf(
@@ -300,28 +301,20 @@ class ExperimentExtractor:
             lines.append(f"- {fid} (p{page}, {ftype}){axes}: {cap}")
         return "\n".join(lines)
 
-    @staticmethod
-    def _build_paper_experiments(source_file: str, data: dict) -> PaperExperiments:
+    def _build_paper_experiments(self, source_file: str, data: dict) -> PaperExperiments:
+        """Validate each experiment via the dynamic ExperimentRun class."""
         exps_raw = data.get("experiments", []) or []
-        experiments: list[ExperimentRun] = []
-        for raw in exps_raw:
+        experiments: list = []
+        # Some legacy LLM outputs use 'construct' instead of 'strain_construct'.
+        for i, raw in enumerate(exps_raw, 1):
+            raw = dict(raw)
+            if "construct" in raw and "strain_construct" not in raw:
+                raw["strain_construct"] = raw.pop("construct")
+            raw.setdefault("experiment_id", f"exp-{i:02d}")
+            raw.setdefault("title", raw.get("description", "")[:60] or f"Experiment {i}")
+            raw.setdefault("sources", [source_file])
             try:
-                exp = ExperimentRun(
-                    experiment_id=raw.get("experiment_id", f"exp-{len(experiments)+1:02d}"),
-                    title=raw.get("title", ""),
-                    description=raw.get("description"),
-                    paper_section=raw.get("paper_section"),
-                    goal=ExperimentGoal(**(raw.get("goal") or {"summary": ""})),
-                    strain_construct=StrainConstruct(**(raw.get("construct") or {})),
-                    setup=FermentationSetup(**(raw.get("setup") or {})),
-                    phases=[PhaseParams(**p) for p in (raw.get("phases") or [])],
-                    outcome=ExperimentOutcome(**(raw.get("outcome") or {})),
-                    linked_figure_ids=raw.get("linked_figure_ids") or [],
-                    purification_method=raw.get("purification_method"),
-                    analytical_methods=raw.get("analytical_methods") or [],
-                    sources=[source_file],
-                )
-                experiments.append(exp)
+                experiments.append(self.experiment_run_cls(**raw))
             except Exception as e:
                 print(
                     f"  [warn] failed to build ExperimentRun from raw entry: {e}",

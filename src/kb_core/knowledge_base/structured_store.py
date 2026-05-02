@@ -6,8 +6,7 @@ import json
 from pathlib import Path
 
 from ..schema.dialectical import DialecticalReview
-from ..schema.experiments import PaperExperiments
-from ..schema_engine import ExtractionResult
+from ..schema_engine import ExtractionResult, PaperExperiments, ProjectSchemas
 
 
 class StructuredStore:
@@ -219,30 +218,46 @@ class StructuredStore:
 
     def save_experiments(self, paper_exps: PaperExperiments) -> None:
         out = self._path / self._experiments_filename(paper_exps.source_file)
-        out.write_text(
-            paper_exps.model_dump_json(indent=2, exclude_none=True),
-            encoding="utf-8",
-        )
+        paper_exps.to_disk(out)
 
-    def load_experiments(self, source_file: str) -> PaperExperiments | None:
+    def load_experiments(
+        self,
+        source_file: str,
+        schemas: ProjectSchemas | None = None,
+    ) -> PaperExperiments | None:
         out = self._path / self._experiments_filename(source_file)
         if not out.exists():
             return None
+        exp_cls, lin_cls = self._exp_classes(schemas)
         try:
-            return PaperExperiments(**json.loads(out.read_text(encoding="utf-8")))
+            return PaperExperiments.from_disk(out, exp_cls, lin_cls)
         except Exception:
             return None
 
-    def load_all_experiments(self) -> list[PaperExperiments]:
+    def load_all_experiments(
+        self,
+        schemas: ProjectSchemas | None = None,
+    ) -> list[PaperExperiments]:
+        exp_cls, lin_cls = self._exp_classes(schemas)
         results = []
         for f in sorted(self._path.glob("*.experiments.json")):
             try:
-                results.append(PaperExperiments(**json.loads(f.read_text(encoding="utf-8"))))
+                results.append(PaperExperiments.from_disk(f, exp_cls, lin_cls))
             except Exception:
                 pass
         return results
 
+    @staticmethod
+    def _exp_classes(schemas: ProjectSchemas | None):
+        if schemas is None:
+            return None, None
+        return (
+            schemas.experiments_models.get("ExperimentRun"),
+            schemas.experiments_models.get("ExperimentLineageEdge"),
+        )
+
     def experiment_summary(self) -> dict:
+        # Doesn't need typed access — counts only
         all_papers = self.load_all_experiments()
         return {
             "papers_with_experiments": len(all_papers),

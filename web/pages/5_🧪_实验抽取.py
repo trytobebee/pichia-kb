@@ -89,7 +89,7 @@ from _project import use_project_sidebar
 use_project_sidebar()
 
 kb = current_kb()
-all_papers = kb.structured_store.load_all_experiments()
+all_papers = kb.structured_store.load_all_experiments(kb.schemas)
 
 st.title("🧪 实验抽取效果")
 st.caption("逐篇展示论文中识别出的发酵实验工艺单(参数快照 + 阶段 + 结果),以及对应的原文图片与文字片段。")
