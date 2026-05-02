@@ -3,11 +3,11 @@
 from pathlib import Path
 import tempfile
 
-from pichia_kb.schema import (
+from kb_core.schema import (
     Strain, Promoter, ExpressionVector, FermentationConditionFact,
     TargetProduct, GlycosylationPattern, KnowledgeChunk, ExtractionResult,
 )
-from pichia_kb.knowledge_base import KnowledgeBase
+from kb_core.knowledge_base import KnowledgeBase
 
 
 def test_strain_schema():

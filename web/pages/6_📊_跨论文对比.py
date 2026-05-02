@@ -28,7 +28,7 @@ st.title("📊 跨论文对比")
 st.caption("把 7 篇论文的 47 个发酵实验拉到同一张表上,按规模/宿主/启动子/产物筛选,并对感兴趣的实验做并列 diff。")
 
 if not all_papers:
-    st.warning("无实验数据。先运行 `pichia-kb extract-experiments`。")
+    st.warning("无实验数据。先运行 `kb extract-experiments`。")
     st.stop()
 
 

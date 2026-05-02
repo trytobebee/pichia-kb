@@ -794,6 +794,47 @@ wheels = [
 ]
 
 [[package]]
+name = "kb-core"
+version = "0.2.0"
+source = { editable = "." }
+dependencies = [
+    { name = "chromadb" },
+    { name = "google-genai" },
+    { name = "hatchling" },
+    { name = "pdfplumber" },
+    { name = "pydantic" },
+    { name = "pymupdf" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "streamlit" },
+    { name = "typer" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chromadb", specifier = ">=1.5.8" },
+    { name = "google-genai", specifier = ">=1.73.1" },
+    { name = "hatchling", specifier = ">=1.29.0" },
+    { name = "pdfplumber", specifier = ">=0.11.9" },
+    { name = "pydantic", specifier = ">=2.13.3" },
+    { name = "pymupdf", specifier = ">=1.27.2.3" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "rich", specifier = ">=15.0.0" },
+    { name = "streamlit", specifier = ">=1.56.0" },
+    { name = "typer", specifier = ">=0.24.2" },
+]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0.3" }]
+
+[[package]]
 name = "kubernetes"
 version = "35.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1330,47 +1371,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/38/37/9ca3519e92a8434eb
 wheels = [
     { url = "https://files.pythonhosted.org/packages/8b/c8/cdbc975f5b634e249cfa6597e37c50f3078412474f21c015e508bfbfe3c3/pdfplumber-0.11.9-py3-none-any.whl", hash = "sha256:33ec5580959ba524e9100138746e090879504c42955df1b8a997604dd326c443", size = 60045, upload-time = "2026-01-05T08:10:27.512Z" },
 ]
-
-[[package]]
-name = "pichia-kb"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "chromadb" },
-    { name = "google-genai" },
-    { name = "hatchling" },
-    { name = "pdfplumber" },
-    { name = "pydantic" },
-    { name = "pymupdf" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "streamlit" },
-    { name = "typer" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "chromadb", specifier = ">=1.5.8" },
-    { name = "google-genai", specifier = ">=1.73.1" },
-    { name = "hatchling", specifier = ">=1.29.0" },
-    { name = "pdfplumber", specifier = ">=0.11.9" },
-    { name = "pydantic", specifier = ">=2.13.3" },
-    { name = "pymupdf", specifier = ">=1.27.2.3" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "rich", specifier = ">=15.0.0" },
-    { name = "streamlit", specifier = ">=1.56.0" },
-    { name = "typer", specifier = ">=0.24.2" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.0.3" }]
 
 [[package]]
 name = "pillow"

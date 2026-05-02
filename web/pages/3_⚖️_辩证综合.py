@@ -39,7 +39,7 @@ st.title("⚖️ 跨论文辩证综合")
 st.caption("对比各论文的相同议题，识别共识（提升可信度）与冲突（提示实验风险）。")
 
 if not dr:
-    st.warning("尚未生成辩证综合。运行 `uv run pichia-kb review` 后刷新页面。")
+    st.warning("尚未生成辩证综合。运行 `uv run kb review` 后刷新页面。")
     st.stop()
 
 # ── Overview ──────────────────────────────────────────────────────────────────

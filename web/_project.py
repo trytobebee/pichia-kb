@@ -20,7 +20,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from pichia_kb.knowledge_base import KnowledgeBase
+from kb_core.knowledge_base import KnowledgeBase
 
 _REPO_ROOT = Path(__file__).parent.parent
 PROJECTS_ROOT = _REPO_ROOT / "data" / "projects"
@@ -82,7 +82,7 @@ def get_assistant():
     The assistant carries its own conversation history; we re-create it
     whenever the active project changes.
     """
-    from pichia_kb.qa import PichiaAssistant
+    from kb_core.qa import PichiaAssistant
 
     slug = current_project()
     if (

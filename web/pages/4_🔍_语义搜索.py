@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import streamlit as st
-from pichia_kb.knowledge_base import KnowledgeBase
+from kb_core.knowledge_base import KnowledgeBase
 
 st.set_page_config(page_title="语义搜索 · 毕赤酵母知识库", page_icon="🔍", layout="wide")
 

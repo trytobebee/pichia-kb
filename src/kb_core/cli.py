@@ -1,4 +1,4 @@
-"""Command-line interface for the Pichia pastoris knowledge base."""
+"""Command-line interface for the kb-core knowledge construction framework."""
 
 from __future__ import annotations
 
@@ -23,8 +23,8 @@ from .ingestion import (PDFProcessor, KnowledgeExtractor, ProcessKnowledgeSynthe
 from .qa import PichiaAssistant
 
 app = typer.Typer(
-    name="pichia-kb",
-    help="Pichia pastoris knowledge base — ingest papers, query the KB",
+    name="kb",
+    help="kb-core — AI-assisted knowledge construction framework: ingest papers, query a project's KB",
     no_args_is_help=True,
 )
 console = Console()
@@ -140,7 +140,7 @@ def add(
         console.print(f"  Control principles: {n_p}  Process stages: {n_s}")
 
     console.print("\n[bold green]Done.[/bold green] "
-                  "Run [cyan]pichia-kb review[/cyan] when ready to update cross-paper synthesis.")
+                  "Run [cyan]kb review[/cyan] when ready to update cross-paper synthesis.")
     _print_summary(kb)
 
 

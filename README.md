@@ -1,8 +1,8 @@
-# pichia-kb
+# kb-core
 
-基于论文的毕赤酵母（*Pichia pastoris* / *Komagataella phaffii*）发酵知识库与问答系统。
+通用的、AI 辅助的"陌生领域知识构建"框架。喂给它若干篇领域论文,得到一个**可问答的结构化知识库** + **可复用的实验工艺单** + **可对比的实验数据**。
 
-目标：通过整合多篇领域论文，构建一个可驱动实验设计的权威问答系统，帮助研究人员可控地生产具有特定结构、修饰和活性的目标产物（当前聚焦：重组人源胶原蛋白）。
+首个项目实例: **pichia-collagen** — 毕赤酵母（*Pichia pastoris* / *Komagataella phaffii*）发酵生产重组人源胶原蛋白,7 篇论文。框架代码与领域内容彻底解耦,任意新领域 (法律、临床试验、综述等) 创建一个新 project 即可复用。
 
 ---
 
@@ -26,7 +26,7 @@ pichia-kb/
 ├── .env.example                # 密钥模板
 ├── pyproject.toml              # 项目配置与依赖
 │
-├── src/pichia_kb/              # 核心源码包
+├── src/kb_core/              # 核心源码包
 │   ├── schema/                 # 知识实体定义（Pydantic 模型）
 │   │   ├── entities.py         # 基础领域实体（菌株、载体、培养基等）
 │   │   ├── process_knowledge.py # 过程控制知识（控制原则、发酵方案等）
@@ -177,10 +177,10 @@ cp .env.example .env
 uv sync
 
 # 4. 直接提问（知识库已构建）
-uv run pichia-kb ask "甲醇诱导阶段的最佳温度和pH是多少？" --project pichia-collagen
+uv run kb ask "甲醇诱导阶段的最佳温度和pH是多少？" --project pichia-collagen
 
 # 5. 交互式问答
-uv run pichia-kb chat --project pichia-collagen
+uv run kb chat --project pichia-collagen
 
 # 6. 启动 Web UI(浏览 + 多轮问答 + 跨论文对比 + 实验/控制原则浏览)
 uv run streamlit run web/Home.py
@@ -196,68 +196,68 @@ uv run streamlit run web/Home.py
 
 ```bash
 # 摄入单篇论文（文本分块 → 向量库 + 结构化实体抽取）
-uv run pichia-kb ingest data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
+uv run kb ingest data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # 摄入整个目录所有 PDF
-uv run pichia-kb ingest data/projects/pichia-collagen/papers/ --project pichia-collagen
+uv run kb ingest data/projects/pichia-collagen/papers/ --project pichia-collagen
 
 # 从论文中提炼发酵控制原则（建议每次 ingest 后运行）
-uv run pichia-kb synthesize data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
+uv run kb synthesize data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # 跨论文辩证综合（所有论文都摄入后运行，约 1-2 分钟）
-uv run pichia-kb review --project pichia-collagen
+uv run kb review --project pichia-collagen
 ```
 
 ### 知识查看
 
 ```bash
 # 查看知识库整体统计
-uv run pichia-kb status --project pichia-collagen
+uv run kb status --project pichia-collagen
 
 # 查看控制原则
-uv run pichia-kb principles --project pichia-collagen
+uv run kb principles --project pichia-collagen
 
 # 查看故障排查
-uv run pichia-kb principles --category troubleshooting --project pichia-collagen
+uv run kb principles --category troubleshooting --project pichia-collagen
 
 # 查看发酵工艺阶段
-uv run pichia-kb principles --category process_stages --project pichia-collagen
+uv run kb principles --category process_stages --project pichia-collagen
 
 # 查看产品质量因子
-uv run pichia-kb principles --category product_quality_factors --project pichia-collagen
+uv run kb principles --category product_quality_factors --project pichia-collagen
 
 # 查看辩证评审（所有主题）
-uv run pichia-kb show-review --project pichia-collagen
+uv run kb show-review --project pichia-collagen
 
 # 查看辩证评审（按关键词过滤）
-uv run pichia-kb show-review --topic "Temperature" --project pichia-collagen
-uv run pichia-kb show-review --topic "P4H" --project pichia-collagen
-uv run pichia-kb show-review --topic "Methanol" --project pichia-collagen
+uv run kb show-review --topic "Temperature" --project pichia-collagen
+uv run kb show-review --topic "P4H" --project pichia-collagen
+uv run kb show-review --topic "Methanol" --project pichia-collagen
 
 # 查看抽取到的结构化实体
-uv run pichia-kb entities target_products --project pichia-collagen
-uv run pichia-kb entities promoters --project pichia-collagen
-uv run pichia-kb entities fermentation_conditions --project pichia-collagen
+uv run kb entities target_products --project pichia-collagen
+uv run kb entities promoters --project pichia-collagen
+uv run kb entities fermentation_conditions --project pichia-collagen
 
 # 语义搜索（返回原文段落）
-uv run pichia-kb search "甲醇流加控制" --project pichia-collagen
-uv run pichia-kb search "胶原蛋白羟基化" --project pichia-collagen
+uv run kb search "甲醇流加控制" --project pichia-collagen
+uv run kb search "胶原蛋白羟基化" --project pichia-collagen
 ```
 
 ### 问答
 
 ```bash
 # 单次提问（流式输出）
-uv run pichia-kb ask "如何选择P4H共表达策略？" --project pichia-collagen
+uv run kb ask "如何选择P4H共表达策略？" --project pichia-collagen
 
 # 交互式对话（支持多轮，/reset 清除历史，/quit 退出）
-uv run pichia-kb chat --project pichia-collagen
+uv run kb chat --project pichia-collagen
 
 # 使用更强的模型回答
-uv run pichia-kb ask "..." --model gemini-2.5-pro --project pichia-collagen
+uv run kb ask "..." --model gemini-2.5-pro --project pichia-collagen
 
 # 调整检索上下文数量（默认 6）
-uv run pichia-kb ask "..." --n-chunks 10 --project pichia-collagen
+uv run kb ask "..." --n-chunks 10 --project pichia-collagen
 ```
 
 ---
@@ -268,10 +268,10 @@ uv run pichia-kb ask "..." --n-chunks 10 --project pichia-collagen
 # Step 1: 将 PDF 放入 data/projects/pichia-collagen/papers/
 
 # Step 2: 一键添加（ingest + synthesize 合并）【必须】
-uv run pichia-kb add data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
+uv run kb add data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # Step 3: 更新跨论文辩证综合【可选，建议批量新增后做一次】
-uv run pichia-kb review --project pichia-collagen
+uv run kb review --project pichia-collagen
 ```
 
 **什么时候需要跑 `review`？**

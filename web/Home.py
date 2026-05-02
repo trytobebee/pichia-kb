@@ -74,7 +74,7 @@ with right:
         for finding in dr.highest_confidence_findings:
             st.success(finding)
     else:
-        st.info("运行 `pichia-kb review` 生成辩证综合后显示")
+        st.info("运行 `kb review` 生成辩证综合后显示")
 
     st.subheader("⚠️ 需谨慎的不确定区域")
     if dr and dr.most_uncertain_areas:

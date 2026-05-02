@@ -95,7 +95,7 @@ st.title("🧪 实验抽取效果")
 st.caption("逐篇展示论文中识别出的发酵实验工艺单(参数快照 + 阶段 + 结果),以及对应的原文图片与文字片段。")
 
 if not all_papers:
-    st.warning("未找到实验抽取数据。先运行 `pichia-kb extract-experiments data/papers/`。")
+    st.warning("未找到实验抽取数据。先运行 `kb extract-experiments data/papers/`。")
     st.stop()
 
 # ── Top metrics ───────────────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ if getattr(paper, "lineage", None):
                     unsafe_allow_html=True,
                 )
 else:
-    st.caption("（此论文未抽取实验链路。运行 `pichia-kb extract-lineage --source <paper>` 生成。）")
+    st.caption("（此论文未抽取实验链路。运行 `kb extract-lineage --source <paper>` 生成。）")
 
 st.divider()
 
