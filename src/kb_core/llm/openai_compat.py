@@ -89,13 +89,18 @@ class OpenAIBackend(LLMBackend):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 4096,
+        extra_body: dict[str, Any] | None = None,
     ) -> str:
-        resp = self.client.chat.completions.create(
+        kwargs: dict[str, Any] = dict(
             model=self._model,
             messages=self._messages(messages, system),
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        merged_extra = {**self._default_extra_body(), **(extra_body or {})}
+        if merged_extra:
+            kwargs["extra_body"] = merged_extra
+        resp = self.client.chat.completions.create(**kwargs)
         return resp.choices[0].message.content or ""
 
     def stream_chat(
@@ -105,14 +110,19 @@ class OpenAIBackend(LLMBackend):
         system: str | None = None,
         temperature: float = 0.2,
         max_tokens: int = 4096,
+        extra_body: dict[str, Any] | None = None,
     ) -> Iterator[str]:
-        stream = self.client.chat.completions.create(
+        kwargs: dict[str, Any] = dict(
             model=self._model,
             messages=self._messages(messages, system),
             temperature=temperature,
             max_tokens=max_tokens,
             stream=True,
         )
+        merged_extra = {**self._default_extra_body(), **(extra_body or {})}
+        if merged_extra:
+            kwargs["extra_body"] = merged_extra
+        stream = self.client.chat.completions.create(**kwargs)
         for event in stream:
             choice = event.choices[0] if event.choices else None
             if choice is None:
@@ -128,6 +138,7 @@ class OpenAIBackend(LLMBackend):
         system: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 8192,
+        extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         # response_format: {type: json_object} is the OpenAI/DeepSeek
         # equivalent of Gemini's response_mime_type='application/json'.
@@ -135,17 +146,36 @@ class OpenAIBackend(LLMBackend):
         sys = (system or "").rstrip()
         if "json" not in sys.lower():
             sys = f"{sys}\n\nReturn ONLY valid JSON.".strip()
-        resp = self.client.chat.completions.create(
+        kwargs: dict[str, Any] = dict(
             model=self._model,
             messages=self._messages([{"role": "user", "content": prompt}], sys),
             temperature=temperature,
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
         )
+        merged_extra = {**self._default_extra_body(), **(extra_body or {})}
+        if merged_extra:
+            kwargs["extra_body"] = merged_extra
+        resp = self.client.chat.completions.create(**kwargs)
         raw = (resp.choices[0].message.content or "").strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
         return json.loads(raw)
+
+    def _default_extra_body(self) -> dict[str, Any]:
+        """Provider-specific defaults applied to every call unless caller
+        overrides via the explicit `extra_body` argument.
+
+        Currently only qwen — qwen3.6 reasoning models default to
+        thinking-on, which makes simple structured-extraction calls 10x
+        slower with no quality gain. We turn it off so the framework's
+        extractor / vision calls finish quickly. Users who want reasoning
+        (e.g. for cross-paper synthesis) can pass enable_thinking=True
+        explicitly via the `extra_body` arg.
+        """
+        if self._provider == "qwen":
+            return {"enable_thinking": False}
+        return {}
 
     def chat_vision_json(
         self,
@@ -155,6 +185,7 @@ class OpenAIBackend(LLMBackend):
         system: str | None = None,
         temperature: float = 0.1,
         max_tokens: int = 8192,
+        extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Send an image + text prompt to a vision-capable OpenAI-compatible
         model. Used for Qwen-VL, Doubao-vision, GPT-4o, etc.
@@ -175,23 +206,23 @@ class OpenAIBackend(LLMBackend):
             {"type": "image_url",
              "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
         ]
+        merged_extra = {**self._default_extra_body(), **(extra_body or {})}
         # Some OAI-compat servers (Qwen) don't accept response_format on
         # vision endpoints. Try with json_object first, fall back without.
+        common_kwargs: dict[str, Any] = dict(
+            model=self._model,
+            messages=self._messages([{"role": "user", "content": user_content}], sys),
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        if merged_extra:
+            common_kwargs["extra_body"] = merged_extra
         try:
             resp = self.client.chat.completions.create(
-                model=self._model,
-                messages=self._messages([{"role": "user", "content": user_content}], sys),
-                temperature=temperature,
-                max_tokens=max_tokens,
-                response_format={"type": "json_object"},
+                **common_kwargs, response_format={"type": "json_object"},
             )
         except Exception:
-            resp = self.client.chat.completions.create(
-                model=self._model,
-                messages=self._messages([{"role": "user", "content": user_content}], sys),
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            resp = self.client.chat.completions.create(**common_kwargs)
         raw = (resp.choices[0].message.content or "").strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]

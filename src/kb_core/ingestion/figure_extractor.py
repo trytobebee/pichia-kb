@@ -388,7 +388,9 @@ class FigureExtractor:
             data = self.llm.chat_vision_json(
                 prompt, img_path,
                 system=self._system,
-                temperature=0.1, max_tokens=8192,
+                # 16K is enough for ~150 dense data points (multi-strain
+                # time-courses pushed our previous 8192 cap over the edge).
+                temperature=0.1, max_tokens=16384,
             )
         except NotImplementedError:
             print(
