@@ -12,8 +12,10 @@ import streamlit as st
 st.set_page_config(page_title="问答 · 知识库", page_icon="💬", layout="wide")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from _project import get_assistant
+from _project import use_project_sidebar, get_assistant
 from pichia_kb.qa import PichiaAssistant
+
+use_project_sidebar()
 
 # ── Session state (per-project assistant + messages) ──────────────────────────
 

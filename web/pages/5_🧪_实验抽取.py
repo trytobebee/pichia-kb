@@ -83,8 +83,10 @@ def locate_pages(source_file: str, queries: tuple[str, ...]) -> list[int]:
     except Exception:
         return []
 
-st.set_page_config(page_title="实验抽取 · 毕赤酵母知识库", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="实验抽取 · 知识库", page_icon="🧪", layout="wide")
 
+from _project import use_project_sidebar
+use_project_sidebar()
 
 kb = current_kb()
 all_papers = kb.structured_store.load_all_experiments()

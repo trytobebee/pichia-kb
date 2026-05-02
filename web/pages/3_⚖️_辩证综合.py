@@ -12,7 +12,9 @@ import streamlit as st
 
 st.set_page_config(page_title="辩证综合 · 知识库", page_icon="⚖️", layout="wide")
 
-from _project import current_kb, current_project_dir
+from _project import use_project_sidebar, current_kb, current_project_dir
+
+use_project_sidebar()
 DATA_DIR = current_project_dir()
 
 CONF_COLOR = {

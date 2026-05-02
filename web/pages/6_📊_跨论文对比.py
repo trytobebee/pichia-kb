@@ -17,7 +17,9 @@ import streamlit as st
 
 st.set_page_config(page_title="跨论文对比 · 知识库", page_icon="📊", layout="wide")
 
-from _project import current_kb, current_project_dir
+from _project import use_project_sidebar, current_kb, current_project_dir
+
+use_project_sidebar()
 DATA_DIR = current_project_dir()
 kb = current_kb()
 all_papers = kb.structured_store.load_all_experiments()

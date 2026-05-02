@@ -1,7 +1,17 @@
 """Shared project-context helpers for Streamlit pages.
 
-Each page imports `current_project_dir()` and `current_kb()`. The sidebar
-project selector is rendered automatically by `current_project()`.
+Usage in each page:
+
+    from _project import use_project_sidebar, current_kb, current_project_dir
+
+    st.set_page_config(...)
+    use_project_sidebar()  # renders the sidebar selector once
+    kb = current_kb()
+    DATA_DIR = current_project_dir()
+
+`use_project_sidebar()` is the only function that touches Streamlit
+widgets. The accessors are pure session-state reads, so they're safe
+to call multiple times per page.
 """
 
 from __future__ import annotations
@@ -22,8 +32,8 @@ def list_projects() -> list[str]:
     return sorted(p.name for p in PROJECTS_ROOT.iterdir() if p.is_dir())
 
 
-def current_project() -> str:
-    """Render sidebar selector and return the active project slug."""
+def use_project_sidebar() -> None:
+    """Render the sidebar project selector. Call ONCE per page."""
     projects = list_projects()
     if not projects:
         st.error(f"No projects found under {PROJECTS_ROOT}. Create one first.")
@@ -33,11 +43,23 @@ def current_project() -> str:
         st.session_state.project = projects[0]
 
     with st.sidebar:
-        st.session_state.project = st.selectbox(
+        chosen = st.selectbox(
             "📁 Project",
             projects,
             index=projects.index(st.session_state.project),
         )
+        if chosen != st.session_state.project:
+            st.session_state.project = chosen
+
+
+def current_project() -> str:
+    """Pure read — returns the active project slug."""
+    if "project" not in st.session_state:
+        projects = list_projects()
+        if not projects:
+            st.error(f"No projects found under {PROJECTS_ROOT}. Create one first.")
+            st.stop()
+        st.session_state.project = projects[0]
     return st.session_state.project
 
 

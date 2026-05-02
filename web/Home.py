@@ -17,8 +17,9 @@ st.set_page_config(
     layout="wide",
 )
 
-from _project import current_kb, current_project_dir
+from _project import use_project_sidebar, current_kb, current_project_dir
 
+use_project_sidebar()
 kb = current_kb()
 DATA_DIR = current_project_dir()
 summary = kb.summary()

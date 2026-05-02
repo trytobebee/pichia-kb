@@ -13,7 +13,9 @@ from pichia_kb.knowledge_base import KnowledgeBase
 
 st.set_page_config(page_title="控制原则 · 毕赤酵母知识库", page_icon="🔬", layout="wide")
 
-from _project import current_kb, current_project_dir
+from _project import use_project_sidebar, current_kb, current_project_dir
+
+use_project_sidebar()
 
 DATA_DIR = current_project_dir()
 kb = current_kb()
