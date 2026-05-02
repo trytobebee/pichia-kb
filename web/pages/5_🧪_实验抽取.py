@@ -442,8 +442,9 @@ with right:
         for fid in exp.linked_figure_ids:
             fig_data = figs_for_paper.get(fid)
             page = (fig_data or {}).get("page_number", "?")
-            ftype = (fig_data or {}).get("figure_type", "")
-            st.markdown(f"#### 📌 {fid}  ·  p{page}  ·  _{ftype}_")
+            panels = (fig_data or {}).get("panels") or []
+            top_ftype = panels[0].get("figure_type", "") if panels else ""
+            st.markdown(f"#### 📌 {fid}  ·  p{page}  ·  _{top_ftype}_")
 
             img_path = FIG_IMG_DIR / f"{stem}__{fid}.png"
             if img_path.exists():
@@ -459,28 +460,51 @@ with right:
             if fig_data.get("caption"):
                 st.markdown(f"**图注**: {fig_data['caption']}")
 
-            notable = fig_data.get("notable_points") or []
-            data_points = fig_data.get("data_points") or []
+            for pi, panel in enumerate(panels):
+                plabel = panel.get("panel_label") or f"Panel {pi+1}"
+                ftype = panel.get("figure_type", "")
+                x_axis = (panel.get("x_axis") or {}).get("label", "")
+                y_axis = (panel.get("y_axis") or {}).get("label", "")
+                y2 = (panel.get("y_axis_secondary") or {}).get("label", "")
+                axes = f"{x_axis} vs {y_axis}" + (f" / {y2}" if y2 else "")
 
-            if notable:
-                with st.expander(f"⭐ 关键点 ({len(notable)} 个)", expanded=True):
-                    for n in notable:
-                        pt = n.get("point_type", "")
-                        desc = n.get("condition_description", "")
-                        val = n.get("value_description", "")
-                        note = n.get("note") or ""
-                        st.markdown(f"- **({pt})** {desc} → **{val}**" + (f" — _{note}_" if note else ""))
+                header = f"**{plabel}** [{ftype}]"
+                if axes.strip(" /"):
+                    header += f" — _{axes}_"
+                st.markdown(header)
 
-            if data_points:
-                with st.expander(f"📋 数据点 ({len(data_points)} 条)"):
-                    rows = []
-                    for dp in data_points:
-                        row = {**(dp.get("conditions") or {}), **(dp.get("values") or {})}
-                        if dp.get("note"):
-                            row["note"] = dp["note"]
-                        rows.append(row)
-                    df_dp = pd.DataFrame(rows)
-                    st.dataframe(df_dp, use_container_width=True, hide_index=True)
+                if panel.get("observed_trend"):
+                    st.markdown(f"📈 _{panel['observed_trend']}_")
+
+                fitted = panel.get("fitted_equation")
+                r2 = panel.get("r_squared")
+                if fitted or r2:
+                    st.caption(
+                        f"Fit: `{fitted or '—'}`" + (f"  R²={r2}" if r2 else "")
+                    )
+
+                notable = panel.get("notable_points") or []
+                data_points = panel.get("data_points") or []
+
+                if notable:
+                    with st.expander(f"⭐ 关键点 ({len(notable)} 个)", expanded=True):
+                        for n in notable:
+                            pt = n.get("point_type", "")
+                            desc = n.get("condition_description", "")
+                            val = n.get("value_description", "")
+                            note = n.get("note") or ""
+                            st.markdown(f"- **({pt})** {desc} → **{val}**" + (f" — _{note}_" if note else ""))
+
+                if data_points:
+                    with st.expander(f"📋 数据点 ({len(data_points)} 条)"):
+                        rows = []
+                        for dp in data_points:
+                            row = {**(dp.get("conditions") or {}), **(dp.get("values") or {})}
+                            if dp.get("note"):
+                                row["note"] = dp["note"]
+                            rows.append(row)
+                        df_dp = pd.DataFrame(rows)
+                        st.dataframe(df_dp, use_container_width=True, hide_index=True)
 
             if fig_data.get("author_conclusion"):
                 st.markdown(f"📝 **作者结论**: {fig_data['author_conclusion']}")

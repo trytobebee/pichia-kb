@@ -253,22 +253,19 @@ class ExperimentExtractor:
         lines = []
         for fig in figures:
             fid = fig.get("figure_id", "?")
-            ftype = fig.get("figure_type", "?")
             page = fig.get("page_number", "?")
             cap = (fig.get("caption") or "")[:120]
-            ivs = fig.get("independent_variables") or []
-            iv_names = [
-                (v.get("name", "") if isinstance(v, dict) else str(v))
-                for v in ivs
-            ]
-            dvs = fig.get("dependent_variables") or []
-            dv_names = [
-                (v.get("name", "") if isinstance(v, dict) else str(v))
-                for v in dvs
-            ]
-            axes = ""
-            if iv_names or dv_names:
-                axes = f" | {','.join(iv_names)} → {','.join(dv_names)}"
+            panels = fig.get("panels") or []
+            ftype = panels[0].get("figure_type", "?") if panels else "?"
+            # Combine axis labels across panels (most figures have one
+            # panel; this still works for multi-panel A/B figures).
+            axes_bits: list[str] = []
+            for p in panels:
+                x = (p.get("x_axis") or {}).get("label", "")
+                y = (p.get("y_axis") or {}).get("label", "")
+                if x or y:
+                    axes_bits.append(f"{x} → {y}")
+            axes = f" | {' / '.join(axes_bits)}" if axes_bits else ""
             lines.append(f"- {fid} (p{page}, {ftype}){axes}: {cap}")
         return "\n".join(lines)
 

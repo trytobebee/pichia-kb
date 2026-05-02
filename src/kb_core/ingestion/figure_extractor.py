@@ -43,69 +43,94 @@ CONTEXT:
 - Surrounding text (experimental description and conclusions):
 {surrounding_text}
 
-Return a JSON object with this exact schema:
+A figure may contain MULTIPLE PANELS (sub-figures labeled A/B/C, (a)/(b)/(c),
+or laid out side-by-side without labels). You MUST emit ONE entry per
+panel under "panels". For figures with only one panel, return a single-
+element panels list with panel_label="".
+
+For EACH panel, you MUST identify the x_axis and y_axis labels (this is
+how the data becomes meaningful — without axis labels the numbers are
+useless). Read them exactly as printed in the figure (Chinese or English).
+If a panel has dual y-axes (a primary y on the left and a secondary y
+on the right, e.g. yield vs OD600 in the same plot), fill in
+y_axis_secondary too.
+
+Return a JSON object with this exact shape:
 
 {{
-  "figure_type": "line_curve|bar_chart|sds_page|table|scatter|heatmap|schematic|microscopy|other",
-
-  "independent_variables": [
-    {{
-      "name": "variable name in Chinese or English",
-      "unit": "unit string or null",
-      "values": [list of discrete tested values, or null if continuous],
-      "range_min": number or null,
-      "range_max": number or null,
-      "range_description": "e.g. '0-144h' or null"
-    }}
-  ],
-
-  "dependent_variables": [
-    {{
-      "name": "variable name",
-      "unit": "unit string or null"
-    }}
-  ],
-
   "fixed_conditions": {{
-    "key": "value for any parameter held constant across this experiment"
+    "key": "values held constant across the WHOLE figure (e.g. strain, medium)"
   }},
 
-  "data_points": [
+  "panels": [
     {{
-      "conditions": {{"independent_var_name": value, ...}},
-      "values": {{"dependent_var_name": numeric_value, ...}},
-      "note": "optional note, e.g. 'estimated from graph' or null"
+      "panel_label": "A | B | (a) | (b) | empty if unlabeled / single panel",
+      "figure_type": "line_curve|bar_chart|sds_page|table|scatter|heatmap|schematic|microscopy|other",
+
+      "x_axis": {{
+        "label": "axis label exactly as printed",
+        "unit": "h | °C | g/L | empty if dimensionless",
+        "range_description": "e.g. '0–144h' or 'log scale 4–12'"
+      }},
+      "y_axis": {{
+        "label": "...",
+        "unit": "...",
+        "range_description": "..."
+      }},
+      "y_axis_secondary": {{
+        "label": "...",
+        "unit": "...",
+        "range_description": "..."
+      }},
+
+      "data_points": [
+        {{
+          "conditions": {{"x": "x value or label", "series": "optional series name"}},
+          "values": {{"y": numeric_value}},
+          "note": "optional note (e.g. 'estimated from graph')"
+        }}
+      ],
+
+      "notable_points": [
+        {{
+          "condition_description": "e.g. 'copy_number=10, time=144h'",
+          "value_description": "e.g. '0.70 g/L'",
+          "point_type": "max|min|optimal|inflection|plateau_start|other",
+          "note": "why this point matters"
+        }}
+      ],
+
+      "fitted_equation": "If the panel shows a regression line, the printed equation (e.g. 'y = -3.0586x + 45.174'); else empty",
+      "r_squared": "Goodness-of-fit value if shown (e.g. '0.9989'); else empty",
+
+      "observed_trend": "One sentence describing the shape/direction in this panel."
     }}
   ],
-
-  "notable_points": [
-    {{
-      "condition_description": "e.g. 'copy_number=10, time=144h'",
-      "value_description": "e.g. '0.70 g/L'",
-      "point_type": "optimal|inflection|plateau_start|minimum|other",
-      "note": "why this point matters"
-    }}
-  ],
-
-  "observed_trend": "One sentence describing the shape/direction of the relationship",
 
   "interpolation_range": {{
-    "description": "safe parameter range for industrial use based on this data",
+    "description": "safe parameter range for industrial use based on this figure",
     "parameters": {{"param_name": {{"min": value, "max": value, "recommended": value}}}}
   }},
 
   "author_conclusion": "What the authors concluded from this figure",
-
   "industrial_note": "How an engineer should use this data for parameter selection"
 }}
 
-IMPORTANT for data_points:
-- For bar charts: one data_point per bar, conditions = {{x_label: value}}
-- For line curves: extract all visible data points along each curve
-- For time-series with multiple lines: include curve_label in conditions
-- For SDS-PAGE: describe band pattern as data_points with lane labels and band MW
-- For tables: each row is one data_point
-- Estimate numeric values from visual inspection when exact numbers are not labeled
+IMPORTANT extraction rules:
+- ENUMERATE EVERY PANEL. A figure with 2 panels MUST produce 2 entries
+  in "panels". Do not collapse them into one panel.
+- READ AXIS LABELS EXACTLY AS PRINTED (do not invent or shorten them).
+  If you cannot read a label, return an empty string — do not guess.
+- For bar charts: one data_point per bar; conditions = {{x: bar_label,
+  series: dataset_name (if multiple series)}}
+- For line curves: extract all visible data points along each curve.
+  If multiple curves, include the series name in conditions.
+- For SDS-PAGE: describe band pattern as data_points with lane labels
+  and band MW.
+- For tables: each row is one data_point; include the row label in
+  conditions and column → value in values.
+- Estimate numeric values from visual inspection when exact numbers are
+  not labeled. Prefix estimates with '~' in value_description.
 """).strip()
 
 
@@ -377,46 +402,51 @@ class FigureExtractor:
             print(f"      [warn] vision extraction failed for {figure_id}: {e}", file=sys.stderr)
             data = {}
 
-        # Map unknown figure types to "other" so a vendor-emitted novel label
-        # (e.g. "mass_spectrometry", "gel_image") doesn't crash validation.
+        # Validate / sanitize panels: ensure each has a valid figure_type
+        # and at minimum a panel_label string.
         _FIG_TYPES = {"line_curve", "bar_chart", "sds_page", "table",
                       "scatter", "heatmap", "schematic", "microscopy", "other"}
-        ft = data.get("figure_type", "other")
-        if ft not in _FIG_TYPES:
-            ft = "other"
+        raw_panels = data.get("panels") or []
+        if not raw_panels:
+            # Tolerate models that returned the legacy single-panel shape.
+            legacy_keys = {"figure_type", "data_points", "independent_variables"}
+            if legacy_keys & set(data):
+                raw_panels = [{
+                    "panel_label": "",
+                    "figure_type": data.get("figure_type", "other"),
+                    "data_points": data.get("data_points", []),
+                    "notable_points": data.get("notable_points", []),
+                    "observed_trend": data.get("observed_trend"),
+                }]
+
+        panels = []
+        for p in raw_panels:
+            ft = p.get("figure_type", "other")
+            if ft not in _FIG_TYPES:
+                ft = "other"
+            panels.append({
+                "panel_label": p.get("panel_label", "") or "",
+                "figure_type": ft,
+                "x_axis": p.get("x_axis"),
+                "y_axis": p.get("y_axis"),
+                "y_axis_secondary": p.get("y_axis_secondary"),
+                "data_points": p.get("data_points", []),
+                "notable_points": p.get("notable_points", []),
+                "fitted_equation": p.get("fitted_equation"),
+                "r_squared": p.get("r_squared"),
+                "observed_trend": p.get("observed_trend"),
+            })
 
         return self.figure_data_cls(
             source_file=source_file,
             figure_id=figure_id,
-            figure_type=ft,
             image_path=str(img_path.relative_to(img_path.parent.parent)),
             page_number=page_number,
             caption=caption,
             surrounding_text=surrounding_text[:2000],
             section=None,
-            independent_variables=[
-                v if isinstance(v, dict) else v
-                for v in data.get("independent_variables", [])
-            ],
-            dependent_variables=[
-                v if isinstance(v, dict) else v
-                for v in data.get("dependent_variables", [])
-            ],
             fixed_conditions=data.get("fixed_conditions", {}),
-            data_points=[
-                {"conditions": dp.get("conditions", {}),
-                 "values": dp.get("values", {}),
-                 "note": dp.get("note")}
-                for dp in data.get("data_points", [])
-            ],
-            notable_points=[
-                {"condition_description": np_.get("condition_description", ""),
-                 "value_description": np_.get("value_description", ""),
-                 "point_type": np_.get("point_type", "other"),
-                 "note": np_.get("note")}
-                for np_ in data.get("notable_points", [])
-            ],
-            observed_trend=data.get("observed_trend"),
+            panels=panels,
             interpolation_range=data.get("interpolation_range"),
             author_conclusion=data.get("author_conclusion"),
             industrial_note=data.get("industrial_note"),

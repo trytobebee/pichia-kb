@@ -1103,35 +1103,35 @@ def figures(
         return rich_escape(str(s)) if s else ""
 
     for fd in all_figs:
+        panels = fd.get("panels") or []
+        # Header line uses the first panel's figure_type as the figure-level
+        # type label (most figures are single-panel anyway).
+        first_ft = panels[0].get("figure_type") if panels else "unknown"
         lines = [
             f"[bold]{e(fd.get('figure_id'))}[/bold]  "
-            f"[dim]{e(fd.get('figure_type'))}  p.{fd.get('page_number')}[/dim]",
+            f"[dim]{e(first_ft)}  p.{fd.get('page_number')}[/dim]",
             f"[cyan]caption:[/cyan] {e(fd.get('caption', '—'))}",
         ]
-
-        ivars = fd.get("independent_variables", [])
-        dvars = fd.get("dependent_variables", [])
-        if ivars:
-            iv_str = ", ".join(f"{v.get('name')}({v.get('unit','')})" for v in ivars)
-            lines.append(f"[cyan]IV:[/cyan] {e(iv_str)}")
-        if dvars:
-            dv_str = ", ".join(f"{v.get('name')}({v.get('unit','')})" for v in dvars)
-            lines.append(f"[cyan]DV:[/cyan] {e(dv_str)}")
 
         if fd.get("fixed_conditions"):
             fc = "  ".join(f"{k}={v}" for k, v in fd["fixed_conditions"].items())
             lines.append(f"[cyan]fixed:[/cyan] {e(fc)}")
 
-        if fd.get("observed_trend"):
-            lines.append(f"[yellow]trend:[/yellow] {e(fd['observed_trend'])}")
-
-        notable = fd.get("notable_points", [])
-        for np_ in notable:
-            lines.append(
-                f"  [green]★[/green] {e(np_.get('condition_description'))} → "
-                f"[bold]{e(np_.get('value_description'))}[/bold]  "
-                f"[dim]({e(np_.get('point_type'))})[/dim]"
-            )
+        for pi, panel in enumerate(panels):
+            label = panel.get("panel_label") or f"#{pi+1}"
+            x = (panel.get("x_axis") or {}).get("label", "")
+            y = (panel.get("y_axis") or {}).get("label", "")
+            y2 = (panel.get("y_axis_secondary") or {}).get("label", "")
+            axes = f"{x} vs {y}" + (f" / {y2}" if y2 else "")
+            lines.append(f"  [magenta]Panel {label}[/magenta] [{e(panel.get('figure_type'))}]: {e(axes)}")
+            if panel.get("observed_trend"):
+                lines.append(f"    [yellow]trend:[/yellow] {e(panel['observed_trend'])}")
+            for np_ in panel.get("notable_points") or []:
+                lines.append(
+                    f"    [green]★[/green] {e(np_.get('condition_description'))} → "
+                    f"[bold]{e(np_.get('value_description'))}[/bold]  "
+                    f"[dim]({e(np_.get('point_type'))})[/dim]"
+                )
 
         if fd.get("industrial_note"):
             lines.append(f"[magenta]industrial:[/magenta] {e(fd['industrial_note'])}")

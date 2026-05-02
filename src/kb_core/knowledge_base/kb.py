@@ -162,24 +162,33 @@ class KnowledgeBase:
             q_words.add(cjk_only[i:i + 2])
         _QUANT_TYPES = {"line_curve", "bar_chart", "scatter"}
 
-        def _var_names(vars_list) -> list[str]:
-            return [
-                (v.get("name", "") if isinstance(v, dict) else str(v))
-                for v in (vars_list or [])
-            ]
+        def _axis_label(axis: dict | None) -> str:
+            if not isinstance(axis, dict):
+                return ""
+            return axis.get("label") or ""
+
+        def _quant_panels(fig: dict) -> list[dict]:
+            return [p for p in (fig.get("panels") or [])
+                    if p.get("figure_type") in _QUANT_TYPES]
 
         all_figs = self.structured_store.load_figures()
         scored_figs: list[tuple[int, dict]] = []
         for fig in all_figs:
-            if fig.get("figure_type") not in _QUANT_TYPES:
+            quant_panels = _quant_panels(fig)
+            if not quant_panels:
                 continue
+            axis_labels = " ".join(
+                _axis_label(p.get("x_axis")) + " " + _axis_label(p.get("y_axis"))
+                + " " + _axis_label(p.get("y_axis_secondary"))
+                for p in quant_panels
+            )
+            trends = " ".join(p.get("observed_trend") or "" for p in quant_panels)
             searchable = " ".join([
                 fig.get("source_file", ""),
                 fig.get("caption", ""),
-                " ".join(_var_names(fig.get("independent_variables"))),
-                " ".join(_var_names(fig.get("dependent_variables"))),
+                axis_labels,
                 fig.get("author_conclusion", ""),
-                fig.get("observed_trend", ""),
+                trends,
             ]).lower()
             hits = _count_hits(searchable, q_words)
             if hits:
@@ -191,26 +200,39 @@ class KnowledgeBase:
             for fig in relevant_figs[:8]:
                 src = fig.get("source_file", "")
                 fid = fig.get("figure_id", "")
-                x = ", ".join(_var_names(fig.get("independent_variables")))
-                y = ", ".join(_var_names(fig.get("dependent_variables")))
-                notable_bits = []
-                for p in (fig.get("notable_points") or [])[:3]:
-                    cond = p.get("condition_description", "")
-                    val = p.get("value_description", "")
-                    note = p.get("note", "")
-                    bit = f"{cond} → {val}" if cond or val else note
-                    if note and (cond or val):
-                        bit += f" ({note})"
-                    if bit:
-                        notable_bits.append(bit)
-                notable = "; ".join(notable_bits)
-                conclusion = fig.get("author_conclusion", "")[:150]
-                line = f"[{src} | {fid}] {x} vs {y}"
-                if notable:
-                    line += f"\n  Notable: {notable}"
-                if conclusion:
-                    line += f"\n  Conclusion: {conclusion}"
-                fig_lines.append(line)
+                conclusion = (fig.get("author_conclusion") or "")[:150]
+                # One block per quantitative panel — preserves panel labels
+                # so an A/B figure shows two distinct entries to the LLM.
+                for panel in _quant_panels(fig):
+                    plabel = panel.get("panel_label") or ""
+                    head = f"[{src} | {fid}{(' | panel ' + plabel) if plabel else ''}]"
+                    x = _axis_label(panel.get("x_axis"))
+                    y = _axis_label(panel.get("y_axis"))
+                    y2 = _axis_label(panel.get("y_axis_secondary"))
+                    axes = f"{x} vs {y}" + (f" / {y2}" if y2 else "")
+                    notable_bits = []
+                    for np_ in (panel.get("notable_points") or [])[:3]:
+                        cond = np_.get("condition_description", "")
+                        val = np_.get("value_description", "")
+                        note = np_.get("note", "")
+                        bit = f"{cond} → {val}" if cond or val else note
+                        if note and (cond or val):
+                            bit += f" ({note})"
+                        if bit:
+                            notable_bits.append(bit)
+                    line = f"{head} {axes}"
+                    if notable_bits:
+                        line += f"\n  Notable: {'; '.join(notable_bits)}"
+                    if panel.get("fitted_equation"):
+                        line += f"\n  Fit: {panel['fitted_equation']}"
+                        if panel.get("r_squared"):
+                            line += f" (R²={panel['r_squared']})"
+                    trend = panel.get("observed_trend") or ""
+                    if trend:
+                        line += f"\n  Trend: {trend[:150]}"
+                    if conclusion:
+                        line += f"\n  Conclusion: {conclusion}"
+                    fig_lines.append(line)
             parts.append("## Relevant Figure Data\n\n" + "\n\n".join(fig_lines))
 
         # 5. Cross-paper entities from registry matching query

@@ -1,19 +1,15 @@
 {
   "system": "data",
-  "version": 1,
+  "version": 2,
   "entity_types": [
     {
       "name": "FigureData",
       "extraction_key": "figures",
-      "description": "Structured data extracted from one figure or table.",
+      "description": "Structured data extracted from one figure or table. A figure may contain multiple panels (sub-figures A/B/C/...); each panel has its own axes, data points, and trend.",
       "fields": [
         {"name": "source_file", "type": "str", "required": true},
         {"name": "figure_id", "type": "str", "required": true,
          "description": "e.g. 'Fig.3-7' or 'Table 2-1'"},
-        {"name": "figure_type", "type": "enum",
-         "enum_values": ["line_curve", "bar_chart", "sds_page", "table",
-                         "scatter", "heatmap", "schematic", "microscopy", "other"],
-         "required": true},
         {"name": "image_path", "type": "str", "required": true,
          "description": "Relative path to saved PNG"},
         {"name": "page_number", "type": "int", "required": true},
@@ -22,55 +18,77 @@
         {"name": "surrounding_text", "type": "str"},
         {"name": "section", "type": "str",
          "description": "e.g. 'Results', '发酵工艺优化'"},
+        {"name": "fixed_conditions", "type": "dict",
+         "description": "Conditions held constant across the whole figure (e.g. strain, medium)"},
 
-        {"name": "independent_variables", "type": "list", "item_type": "object",
+        {"name": "panels", "type": "list", "item_type": "object",
+         "description": "One entry per sub-figure. Use a single panel with empty panel_label for figures without sub-panels.",
          "fields": [
-           {"name": "name", "type": "str", "required": true},
-           {"name": "unit", "type": "str"},
-           {"name": "values", "type": "list", "item_type": "str",
-            "description": "Discrete tested values"},
-           {"name": "range_min", "type": "float"},
-           {"name": "range_max", "type": "float"},
-           {"name": "range_description", "type": "str",
-            "description": "e.g. '0-144h'"}
+           {"name": "panel_label", "type": "str",
+            "description": "e.g. 'A', 'B', '(a)', or empty if the figure has only one panel."},
+           {"name": "figure_type", "type": "enum",
+            "enum_values": ["line_curve", "bar_chart", "sds_page", "table",
+                            "scatter", "heatmap", "schematic", "microscopy", "other"],
+            "required": true,
+            "description": "Visual type of THIS panel."},
+
+           {"name": "x_axis", "type": "object",
+            "description": "Independent variable for this panel.",
+            "fields": [
+              {"name": "label", "type": "str", "required": true,
+               "description": "Axis label exactly as printed (e.g. 'log n(GAPDH)', '发酵时间')."},
+              {"name": "unit", "type": "str",
+               "description": "e.g. 'h', '°C', 'g/L', empty if dimensionless."},
+              {"name": "range_description", "type": "str",
+               "description": "e.g. '0–144h' or 'log scale 4–12'"}
+            ]},
+
+           {"name": "y_axis", "type": "object",
+            "description": "Primary dependent variable for this panel.",
+            "fields": [
+              {"name": "label", "type": "str", "required": true},
+              {"name": "unit", "type": "str"},
+              {"name": "range_description", "type": "str"}
+            ]},
+
+           {"name": "y_axis_secondary", "type": "object",
+            "description": "Right-side / second y-axis if the panel has dual axes (e.g. yield vs OD600).",
+            "fields": [
+              {"name": "label", "type": "str", "required": true},
+              {"name": "unit", "type": "str"},
+              {"name": "range_description", "type": "str"}
+            ]},
+
+           {"name": "data_points", "type": "list", "item_type": "object",
+            "description": "One measurement per entry. For dual-axis or multi-series panels, include the series name in conditions, e.g. {x: '10-Pp', series: 'OD600'}.",
+            "fields": [
+              {"name": "conditions", "type": "dict", "required": true,
+               "description": "x value(s) and any series/group label, e.g. {'x': '10-Pp-Pr-Pab1', 'series': 'hICOLIII'}"},
+              {"name": "values", "type": "dict", "required": true,
+               "description": "y value(s), e.g. {'yield_gL': 0.92}"},
+              {"name": "note", "type": "str"}
+            ]},
+
+           {"name": "notable_points", "type": "list", "item_type": "object",
+            "fields": [
+              {"name": "condition_description", "type": "str", "required": true},
+              {"name": "value_description", "type": "str", "required": true},
+              {"name": "point_type", "type": "str", "required": true,
+               "description": "max | min | optimal | inflection | plateau_start | other"},
+              {"name": "note", "type": "str"}
+            ]},
+
+           {"name": "fitted_equation", "type": "str",
+            "description": "If the panel shows a regression line / model fit, the equation as printed (e.g. 'y = -3.0586x + 45.174')"},
+           {"name": "r_squared", "type": "str",
+            "description": "Goodness-of-fit value if shown (e.g. '0.9989')"},
+
+           {"name": "observed_trend", "type": "str",
+            "description": "One sentence describing the relationship in this panel."}
          ]},
 
-        {"name": "dependent_variables", "type": "list", "item_type": "object",
-         "fields": [
-           {"name": "name", "type": "str", "required": true},
-           {"name": "unit", "type": "str"},
-           {"name": "values", "type": "list", "item_type": "str"},
-           {"name": "range_min", "type": "float"},
-           {"name": "range_max", "type": "float"},
-           {"name": "range_description", "type": "str"}
-         ]},
-
-        {"name": "fixed_conditions", "type": "dict"},
-
-        {"name": "data_points", "type": "list", "item_type": "object",
-         "description": "One measurement per entry.",
-         "fields": [
-           {"name": "conditions", "type": "dict", "required": true,
-            "description": "e.g. {'copy_number': 10, 'time_h': 144}"},
-           {"name": "values", "type": "dict", "required": true,
-            "description": "e.g. {'yield_gL': 0.70, 'OD600': 85}"},
-           {"name": "note", "type": "str"}
-         ]},
-
-        {"name": "notable_points", "type": "list", "item_type": "object",
-         "fields": [
-           {"name": "condition_description", "type": "str", "required": true,
-            "description": "e.g. 'copy=10, t=144h'"},
-           {"name": "value_description", "type": "str", "required": true,
-            "description": "e.g. '0.70 g/L'"},
-           {"name": "point_type", "type": "str", "required": true,
-            "description": "optimal | inflection | plateau_start | minimum | other"},
-           {"name": "note", "type": "str"}
-         ]},
-
-        {"name": "observed_trend", "type": "str"},
         {"name": "interpolation_range", "type": "dict",
-         "description": "Safe range for parameter selection"},
+         "description": "Safe range for parameter selection across the figure"},
         {"name": "author_conclusion", "type": "str"},
         {"name": "industrial_note", "type": "str",
          "description": "Relevance for process parameter selection"}
