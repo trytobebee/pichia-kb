@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
@@ -14,19 +15,11 @@ load_dotenv(Path(__file__).parent.parent.parent / ".env")
 import pandas as pd
 import streamlit as st
 
-from pichia_kb.knowledge_base import KnowledgeBase
+st.set_page_config(page_title="跨论文对比 · 知识库", page_icon="📊", layout="wide")
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
-
-st.set_page_config(page_title="跨论文对比 · 毕赤酵母知识库", page_icon="📊", layout="wide")
-
-
-@st.cache_resource
-def get_kb():
-    return KnowledgeBase(data_dir=DATA_DIR)
-
-
-kb = get_kb()
+from _project import current_kb, current_project_dir
+DATA_DIR = current_project_dir()
+kb = current_kb()
 all_papers = kb.structured_store.load_all_experiments()
 
 st.title("📊 跨论文对比")

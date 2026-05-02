@@ -8,25 +8,18 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import streamlit as st
-from pichia_kb.knowledge_base import KnowledgeBase
+
+st.set_page_config(page_title="问答 · 知识库", page_icon="💬", layout="wide")
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from _project import get_assistant
 from pichia_kb.qa import PichiaAssistant
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
+# ── Session state (per-project assistant + messages) ──────────────────────────
 
-st.set_page_config(page_title="问答 · 毕赤酵母知识库", page_icon="💬", layout="wide")
-
-@st.cache_resource
-def get_kb():
-    return KnowledgeBase(data_dir=DATA_DIR)
-
-# ── Session state ─────────────────────────────────────────────────────────────
-
-if "assistant" not in st.session_state:
-    st.session_state.assistant = PichiaAssistant(kb=get_kb())
+assistant: PichiaAssistant = get_assistant()
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
-assistant: PichiaAssistant = st.session_state.assistant
 
 # ── Header ────────────────────────────────────────────────────────────────────
 
@@ -42,7 +35,9 @@ with st.sidebar:
 
     if st.button("🗑️ 清空对话", use_container_width=True):
         st.session_state.messages = []
-        st.session_state.assistant = PichiaAssistant(kb=get_kb(), model=model, n_chunks=n_chunks)
+        # Drop assistant so get_assistant() rebuilds it next run
+        st.session_state.pop("assistant", None)
+        st.session_state.pop("assistant_project", None)
         st.rerun()
 
     st.divider()

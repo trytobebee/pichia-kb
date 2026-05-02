@@ -10,7 +10,7 @@ from collections import Counter
 from pathlib import Path
 
 
-DATA = Path(__file__).resolve().parent.parent / "data" / "structured"
+DATA = Path(__file__).resolve().parent.parent / "data" / "projects" / "pichia-collagen" / "structured"
 FIG_DIR = DATA / "figures"
 
 

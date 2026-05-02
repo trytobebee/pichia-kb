@@ -48,9 +48,12 @@ pichia-kb/
 │   └── cli.py                  # 命令行界面
 │
 ├── data/
-│   ├── papers/                 # 原始 PDF 论文（放这里）
-│   ├── db/                     # ChromaDB 向量库（自动生成，不入 git）
-│   └── structured/             # JSON 知识文件（自动生成，不入 git）
+│   └── projects/<slug>/        # 每个项目独立隔离的数据
+│       ├── papers/             # 原始 PDF 论文（放这里）
+│       ├── db/                 # ChromaDB 向量库（自动生成，不入 git）
+│       ├── cache/              # PDF 文本缓存
+│       ├── figures/            # 图表 PNG（自动生成）
+│       └── structured/         # JSON 知识文件（自动生成）
 │
 └── tests/
     └── test_schema.py          # 单元测试（无需 API）
@@ -60,9 +63,19 @@ pichia-kb/
 
 ## 数据与知识组织
 
-### `data/papers/`
+### 项目模型
 
-存放原始 PDF 论文。当前已收录 7 篇：
+每个研究方向是一个独立的**项目** (project),数据完全隔离在 `data/projects/<slug>/` 下。所有 CLI 命令都需要 `--project <slug>` (简写 `-p`) 显式指定操作哪个项目;web 端有项目选择器。当前仓库内置一个项目:
+
+| 项目 slug | 内容 |
+|---|---|
+| `pichia-collagen` | 毕赤酵母重组人源胶原蛋白发酵 7 篇论文 |
+
+未来其他领域(法律、临床试验、综述等)以新 slug 创建,共享框架代码,数据互不干扰。
+
+### `data/projects/<slug>/papers/`
+
+存放原始 PDF 论文。`pichia-collagen` 项目当前收录 7 篇:
 
 | 文件 | 内容 |
 |------|------|
@@ -74,15 +87,15 @@ pichia-kb/
 | 重组Ⅲ型人源化胶原蛋白表达体系构建与性质探究_刘伟兴.pdf | COL3 表达体系构建与性质 |
 | 重组人Ⅰ型、Ⅱ型胶原蛋白α1链的全长表达优化及应用_李佳佳.pdf | I/II 型胶原蛋白全长表达 |
 
-### `data/db/`
+### `data/projects/<slug>/db/`
 
 ChromaDB 向量库，存储所有论文的文本 chunks，支持语义相似度检索。由 `ingest` 命令自动写入，**不需要手动操作**。
 
-### `data/cache/`
+### `data/projects/<slug>/cache/`
 
 PDF 原文文本缓存（`<论文名>.txt`）。所有摄入命令首次解析 PDF 时写入，之后所有阶段（ingest / synthesize / review / domain-knowledge / extract-figures）直接读缓存，避免重复 pdfplumber 解析；也方便排查"LLM 看到了什么"。删除该目录会触发重新解析，不影响其他数据。
 
-### `data/structured/`
+### `data/projects/<slug>/structured/`
 
 JSON 格式的结构化知识，包含 3 类文件：
 
@@ -164,10 +177,15 @@ cp .env.example .env
 uv sync
 
 # 4. 直接提问（知识库已构建）
-uv run pichia-kb ask "甲醇诱导阶段的最佳温度和pH是多少？"
+uv run pichia-kb ask "甲醇诱导阶段的最佳温度和pH是多少？" --project pichia-collagen
 
 # 5. 交互式问答
-uv run pichia-kb chat
+uv run pichia-kb chat --project pichia-collagen
+
+# 6. 启动 Web UI(浏览 + 多轮问答 + 跨论文对比 + 实验/控制原则浏览)
+uv run streamlit run web/Home.py
+# 浏览器自动打开 http://localhost:8501
+# 侧边栏顶部有 "📁 Project" 选择器
 ```
 
 ---
@@ -178,68 +196,68 @@ uv run pichia-kb chat
 
 ```bash
 # 摄入单篇论文（文本分块 → 向量库 + 结构化实体抽取）
-uv run pichia-kb ingest data/papers/新论文.pdf
+uv run pichia-kb ingest data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # 摄入整个目录所有 PDF
-uv run pichia-kb ingest data/papers/
+uv run pichia-kb ingest data/projects/pichia-collagen/papers/ --project pichia-collagen
 
 # 从论文中提炼发酵控制原则（建议每次 ingest 后运行）
-uv run pichia-kb synthesize data/papers/新论文.pdf
+uv run pichia-kb synthesize data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # 跨论文辩证综合（所有论文都摄入后运行，约 1-2 分钟）
-uv run pichia-kb review
+uv run pichia-kb review --project pichia-collagen
 ```
 
 ### 知识查看
 
 ```bash
 # 查看知识库整体统计
-uv run pichia-kb status
+uv run pichia-kb status --project pichia-collagen
 
 # 查看控制原则
-uv run pichia-kb principles
+uv run pichia-kb principles --project pichia-collagen
 
 # 查看故障排查
-uv run pichia-kb principles --category troubleshooting
+uv run pichia-kb principles --category troubleshooting --project pichia-collagen
 
 # 查看发酵工艺阶段
-uv run pichia-kb principles --category process_stages
+uv run pichia-kb principles --category process_stages --project pichia-collagen
 
 # 查看产品质量因子
-uv run pichia-kb principles --category product_quality_factors
+uv run pichia-kb principles --category product_quality_factors --project pichia-collagen
 
 # 查看辩证评审（所有主题）
-uv run pichia-kb show-review
+uv run pichia-kb show-review --project pichia-collagen
 
 # 查看辩证评审（按关键词过滤）
-uv run pichia-kb show-review --topic "Temperature"
-uv run pichia-kb show-review --topic "P4H"
-uv run pichia-kb show-review --topic "Methanol"
+uv run pichia-kb show-review --topic "Temperature" --project pichia-collagen
+uv run pichia-kb show-review --topic "P4H" --project pichia-collagen
+uv run pichia-kb show-review --topic "Methanol" --project pichia-collagen
 
 # 查看抽取到的结构化实体
-uv run pichia-kb entities target_products
-uv run pichia-kb entities promoters
-uv run pichia-kb entities fermentation_conditions
+uv run pichia-kb entities target_products --project pichia-collagen
+uv run pichia-kb entities promoters --project pichia-collagen
+uv run pichia-kb entities fermentation_conditions --project pichia-collagen
 
 # 语义搜索（返回原文段落）
-uv run pichia-kb search "甲醇流加控制"
-uv run pichia-kb search "胶原蛋白羟基化"
+uv run pichia-kb search "甲醇流加控制" --project pichia-collagen
+uv run pichia-kb search "胶原蛋白羟基化" --project pichia-collagen
 ```
 
 ### 问答
 
 ```bash
 # 单次提问（流式输出）
-uv run pichia-kb ask "如何选择P4H共表达策略？"
+uv run pichia-kb ask "如何选择P4H共表达策略？" --project pichia-collagen
 
 # 交互式对话（支持多轮，/reset 清除历史，/quit 退出）
-uv run pichia-kb chat
+uv run pichia-kb chat --project pichia-collagen
 
 # 使用更强的模型回答
-uv run pichia-kb ask "..." --model gemini-2.5-pro
+uv run pichia-kb ask "..." --model gemini-2.5-pro --project pichia-collagen
 
 # 调整检索上下文数量（默认 6）
-uv run pichia-kb ask "..." --n-chunks 10
+uv run pichia-kb ask "..." --n-chunks 10 --project pichia-collagen
 ```
 
 ---
@@ -247,13 +265,13 @@ uv run pichia-kb ask "..." --n-chunks 10
 ## 新增论文的完整流程
 
 ```bash
-# Step 1: 将 PDF 放入 data/papers/
+# Step 1: 将 PDF 放入 data/projects/pichia-collagen/papers/
 
 # Step 2: 一键添加（ingest + synthesize 合并）【必须】
-uv run pichia-kb add data/papers/新论文.pdf
+uv run pichia-kb add data/projects/pichia-collagen/papers/新论文.pdf --project pichia-collagen
 
 # Step 3: 更新跨论文辩证综合【可选，建议批量新增后做一次】
-uv run pichia-kb review
+uv run pichia-kb review --project pichia-collagen
 ```
 
 **什么时候需要跑 `review`？**

@@ -20,7 +20,7 @@ from pathlib import Path
 
 import fitz
 
-PAPERS_DIR = Path(__file__).parent.parent / "data" / "papers"
+PAPERS_DIR = Path(__file__).parent.parent / "data" / "projects" / "pichia-collagen" / "papers"
 
 # Thresholds (tuned for letter/A4 academic PDFs)
 BIG_IMAGE_PX = 200 * 200          # an "image" smaller than this is likely a logo/decoration

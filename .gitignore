@@ -11,9 +11,9 @@ dist/
 # macOS
 .DS_Store
 
-# data — copyrighted source PDFs and all derivatives kept out of public repo
-data/papers/
-data/figures/
-data/cache/
-data/db/
-data/structured/
+# data — every project's contents (copyrighted PDFs + derivatives) stay local
+data/projects/*/papers/
+data/projects/*/figures/
+data/projects/*/cache/
+data/projects/*/db/
+data/projects/*/structured/

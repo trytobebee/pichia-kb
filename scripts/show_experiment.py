@@ -17,7 +17,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-DATA = Path(__file__).resolve().parent.parent / "data" / "structured"
+DATA = Path(__file__).resolve().parent.parent / "data" / "projects" / "pichia-collagen" / "structured"
 FIG_JSON_DIR = DATA / "figures"
 
 console = Console()

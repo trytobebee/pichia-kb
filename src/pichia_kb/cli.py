@@ -29,13 +29,26 @@ app = typer.Typer(
 )
 console = Console()
 
-# Default paths relative to project root
-_DEFAULT_DATA_DIR = Path(__file__).parent.parent.parent / "data"
-_DEFAULT_PAPERS_DIR = _DEFAULT_DATA_DIR / "papers"
+# Project layout: data/projects/<slug>/{papers,db,cache,figures,structured,...}
+_PROJECTS_ROOT = Path(__file__).parent.parent.parent / "data" / "projects"
 
 
-def _get_kb(data_dir: Path) -> KnowledgeBase:
-    return KnowledgeBase(data_dir=data_dir)
+def _resolve_project(slug: str) -> Path:
+    """Return the project directory for a slug. Errors out if it doesn't exist."""
+    proj = _PROJECTS_ROOT / slug
+    if not proj.is_dir():
+        existing = sorted(p.name for p in _PROJECTS_ROOT.iterdir() if p.is_dir()) if _PROJECTS_ROOT.is_dir() else []
+        msg = f"Project '{slug}' not found at {proj}."
+        if existing:
+            msg += f" Existing projects: {', '.join(existing)}"
+        else:
+            msg += " No projects exist yet."
+        raise typer.BadParameter(msg)
+    return proj
+
+
+def _get_kb(project_dir: Path) -> KnowledgeBase:
+    return KnowledgeBase(data_dir=project_dir)
 
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -43,11 +56,12 @@ def _get_kb(data_dir: Path) -> KnowledgeBase:
 @app.command()
 def ingest(
     pdf: Path = typer.Argument(..., help="Path to PDF paper (or directory of PDFs)"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     source_ref: str = typer.Option("", help="DOI or citation for this paper"),
     model: str = typer.Option("gemini-2.5-flash", help="Claude model for extraction"),
 ):
     """Ingest a PDF paper (or all PDFs in a directory) into the knowledge base."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
     extractor = KnowledgeExtractor(model=model, cache_dir=cache_dir)
@@ -87,7 +101,7 @@ def ingest(
 @app.command()
 def add(
     pdf: Path = typer.Argument(..., help="PDF file or directory to add"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
 ):
     """Add a new paper: ingest + synthesize in one step.
@@ -95,6 +109,7 @@ def add(
     Run 'review' separately after adding several papers to update
     the cross-paper dialectical synthesis.
     """
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
     extractor = KnowledgeExtractor(model=model, cache_dir=cache_dir)
@@ -131,19 +146,21 @@ def add(
 
 @app.command()
 def status(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
 ):
     """Show knowledge base statistics."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     _print_summary(kb)
 
 
 @app.command()
 def normalize(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show what would change without writing"),
 ):
     """Layer 3.5: deduplicate and merge entities within each paper's extraction JSON."""
+    data_dir = _resolve_project(project)
     structured_dir = data_dir / "structured"
     verb = "Would remove" if dry_run else "Removed"
 
@@ -205,10 +222,11 @@ def normalize(
 
 @app.command("build-registry")
 def build_registry_cmd(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model for synonym clustering"),
 ):
     """Layer 3.5: build cross-paper entity registry (rule-based + LLM synonym clustering)."""
+    data_dir = _resolve_project(project)
     structured_dir = data_dir / "structured"
     console.print(Panel(
         "Building cross-paper entity registry.\n"
@@ -248,9 +266,10 @@ def entities(
             "target_products | process_parameters | analytical_methods"
         ),
     ),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
 ):
     """List extracted entities of a given type."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     items = kb.get_entities(entity_type)
     if not items:
@@ -283,9 +302,10 @@ def entities(
 def search(
     query: str = typer.Argument(..., help="Semantic search query"),
     n: int = typer.Option(5, help="Number of results"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
 ):
     """Semantic search in the vector store (show raw retrieved chunks)."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     hits = kb.semantic_search(query, n=n)
     if not hits:
@@ -303,11 +323,12 @@ def search(
 
 @app.command()
 def chat(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Claude model for Q&A"),
     n_chunks: int = typer.Option(6, help="Number of context chunks to retrieve"),
 ):
     """Interactive Q&A session with the Pichia assistant."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     assistant = PichiaAssistant(kb=kb, model=model, n_chunks=n_chunks)
 
@@ -350,11 +371,12 @@ def chat(
 @app.command()
 def ask(
     question: str = typer.Argument(..., help="Question to ask"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
     n_chunks: int = typer.Option(6, help="Context chunks"),
 ):
     """Ask a single question (non-interactive)."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     assistant = PichiaAssistant(kb=kb, model=model, n_chunks=n_chunks)
     console.print("[bold green]Answer:[/bold green]")
@@ -364,10 +386,11 @@ def ask(
 @app.command()
 def synthesize(
     pdf: Path = typer.Argument(..., help="PDF file or directory to synthesize process knowledge from"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
 ):
     """Extract fermentation control principles and protocols from papers."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     synth = ProcessKnowledgeSynthesizer(model=model, cache_dir=data_dir / "cache")
 
@@ -401,10 +424,11 @@ def synthesize(
 
 @app.command()
 def review(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-pro", help="Model for dialectical review (use pro for best quality)"),
 ):
     """Cross-paper dialectical review: find consensus, contradictions, and uncertainties."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
 
     pk_raw = kb.structured_store._load_pk_raw()
@@ -453,10 +477,11 @@ def review(
 
 @app.command()
 def show_review(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     topic: str = typer.Option("", help="Filter by topic keyword"),
 ):
     """Display the stored dialectical review."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     dr = kb.get_dialectical_review()
     if not dr:
@@ -516,13 +541,14 @@ def show_review(
 
 @app.command()
 def principles(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     category: str = typer.Option(
         "control_principles",
         help="control_principles | process_stages | troubleshooting | product_quality_factors | fermentation_protocols"
     ),
 ):
     """List synthesized process control knowledge."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     items = kb.get_process_knowledge(category)
     if not items:
@@ -548,10 +574,11 @@ def principles(
 @app.command("extract-figures")
 def extract_figures(
     pdf: Path = typer.Argument(..., help="PDF file or directory of PDFs"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model for vision extraction"),
 ):
     """Extract figures from PDFs: save images + structured data (data points, trends, conclusions)."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     figures_dir = data_dir / "figures"
     extractor = FigureExtractor(
@@ -617,7 +644,7 @@ def refine_figures_cmd(
     paper: str = typer.Option("", help="Filter by paper filename (partial match)"),
     exp: str = typer.Option("", help="Filter by experiment_id (partial match)"),
     fig: str = typer.Option("", help="Filter by figure_id (partial match)"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model. Flash+dynamic thinking is enough for label alignment; use Pro if values are off."),
 ):
     """Re-extract experiment-linked figures using the experiment's varied_parameters as a label prior.
@@ -625,6 +652,7 @@ def refine_figures_cmd(
     Useful when the original extraction merged adjacent x-axis labels (CJK + Greek mix) or
     miscounted bar groups. Combines visual bar-counting with text-derived expected categories.
     """
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     extractor = FigureExtractor(
         figures_dir=data_dir / "figures", model=model, cache_dir=data_dir / "cache"
@@ -719,10 +747,11 @@ def refine_figures_cmd(
 @app.command("extract-experiments")
 def extract_experiments(
     pdf: Path = typer.Argument(..., help="PDF file or directory of PDFs"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-pro", help="Gemini model"),
 ):
     """Extract structured experiment runs (parameter snapshots + outcome + figure links) from papers."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     extractor = ExperimentExtractor(model=model, cache_dir=data_dir / "cache")
 
@@ -755,10 +784,11 @@ def extract_experiments(
 @app.command("extract-lineage")
 def extract_lineage(
     source: str = typer.Option("", help="Filter by paper filename (partial match). Empty = all."),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-pro", help="Gemini model"),
 ):
     """Extract intra-paper experiment lineage (parent → child edges) and persist on PaperExperiments."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     extractor = LineageExtractor(model=model)
 
@@ -795,11 +825,12 @@ def extract_lineage(
 
 @app.command()
 def experiments(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     source: str = typer.Option("", help="Filter by paper filename (partial match)"),
     show_phases: bool = typer.Option(False, "--phases", help="Show phase parameter detail"),
 ):
     """Browse extracted experiment runs."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     all_papers = kb.structured_store.load_all_experiments()
     if source:
@@ -850,12 +881,13 @@ def experiments(
 
 @app.command()
 def figures(
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     source: str = typer.Option("", help="Filter by paper filename (partial match)"),
     fig_type: str = typer.Option("", help="Filter by figure type (e.g. line_curve, bar_chart)"),
     show_data: bool = typer.Option(False, "--data", help="Show extracted data points"),
 ):
     """Browse extracted figure data and their quantitative results."""
+    data_dir = _resolve_project(project)
     kb = _get_kb(data_dir)
     all_figs = kb.structured_store.load_figures()
 
@@ -922,11 +954,12 @@ def figures(
 
 @app.command("domain-knowledge")
 def domain_knowledge_cmd(
-    papers_dir: Path = typer.Option(_DEFAULT_PAPERS_DIR, help="Directory containing PDF papers"),
-    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, help="Data directory"),
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
 ):
     """Synthesize cross-paper domain knowledge: proteins, substrates, yields, challenges, innovations."""
+    data_dir = _resolve_project(project)
+    papers_dir = data_dir / "papers"
     kb = _get_kb(data_dir)
     synth = DomainKnowledgeSynthesizer(model=model, cache_dir=data_dir / "cache")
 
@@ -1001,9 +1034,12 @@ def domain_knowledge_cmd(
 
 
 @app.command("show-domain")
-def show_domain():
+def show_domain(
+    project: str = typer.Option(..., "--project", "-p", help="Project slug"),
+):
     """Display stored domain knowledge."""
-    kb = _get_kb(_DEFAULT_DATA_DIR)
+    data_dir = _resolve_project(project)
+    kb = _get_kb(data_dir)
     data = kb.structured_store.load_domain_knowledge()
     if not data:
         console.print("[yellow]No domain knowledge found. Run 'domain-knowledge' first.[/yellow]")

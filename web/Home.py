@@ -4,14 +4,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 import streamlit as st
-from pichia_kb.knowledge_base import KnowledgeBase
-
-DATA_DIR = Path(__file__).parent.parent / "data"
 
 st.set_page_config(
     page_title="毕赤酵母发酵知识库",
@@ -19,11 +17,10 @@ st.set_page_config(
     layout="wide",
 )
 
-@st.cache_resource
-def get_kb():
-    return KnowledgeBase(data_dir=DATA_DIR)
+from _project import current_kb, current_project_dir
 
-kb = get_kb()
+kb = current_kb()
+DATA_DIR = current_project_dir()
 summary = kb.summary()
 dr = kb.get_dialectical_review()
 

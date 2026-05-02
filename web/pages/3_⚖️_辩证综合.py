@@ -3,16 +3,17 @@
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent.parent / ".env")
 
 import streamlit as st
-from pichia_kb.knowledge_base import KnowledgeBase
 
-DATA_DIR = Path(__file__).parent.parent.parent / "data"
+st.set_page_config(page_title="辩证综合 · 知识库", page_icon="⚖️", layout="wide")
 
-st.set_page_config(page_title="辩证综合 · 毕赤酵母知识库", page_icon="⚖️", layout="wide")
+from _project import current_kb, current_project_dir
+DATA_DIR = current_project_dir()
 
 CONF_COLOR = {
     "high": ("🟢", "green"),
@@ -29,11 +30,7 @@ CONF_LABEL = {
     "uncertain": "不确定",
 }
 
-@st.cache_resource
-def get_kb():
-    return KnowledgeBase(data_dir=DATA_DIR)
-
-kb = get_kb()
+kb = current_kb()
 dr = kb.get_dialectical_review()
 
 st.title("⚖️ 跨论文辩证综合")
