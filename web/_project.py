@@ -82,14 +82,16 @@ def get_assistant():
     The assistant carries its own conversation history; we re-create it
     whenever the active project changes.
     """
-    from kb_core.qa import PichiaAssistant
+    from kb_core.config import load_project_config
+    from kb_core.qa import Assistant
 
     slug = current_project()
     if (
         "assistant" not in st.session_state
         or st.session_state.get("assistant_project") != slug
     ):
-        st.session_state.assistant = PichiaAssistant(kb=current_kb())
+        cfg = load_project_config(current_project_dir())
+        st.session_state.assistant = Assistant(kb=current_kb(), domain=cfg.domain)
         st.session_state.assistant_project = slug
         st.session_state.messages = []
     return st.session_state.assistant

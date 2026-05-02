@@ -1,0 +1,77 @@
+slug: pichia-collagen
+name: 毕赤酵母重组人源胶原蛋白发酵知识库
+description: |
+  基于 7 篇中文论文构建的毕赤酵母 (Pichia pastoris / Komagataella phaffii)
+  发酵生产重组人源胶原蛋白知识库 + 实验工艺单 + 实验数据集合。
+
+# Keywords used by the PDF chunker to identify domain-relevant pages.
+keywords:
+  - pichia
+  - komagataella
+  - pastoris
+  - phaffii
+  - 毕赤酵母
+  - 巴氏毕赤
+  - 甲醇
+  - 启动子
+  - 发酵
+  - 诱导
+  - 胶原蛋白
+  - AOX1
+  - DAS2
+  - GS115
+  - X-33
+  - 重组蛋白
+  - 高密度发酵
+
+domain:
+  expert_field: |
+    Pichia pastoris (Komagataella phaffii) / 毕赤酵母 molecular biology and
+    bioprocess engineering, with a focus on recombinant protein expression
+    (especially recombinant human collagen)
+
+  paper_topic: |
+    Pichia pastoris collagen expression and high-density fermentation
+
+  field_summary: |
+    Pichia pastoris bioprocess engineering and fermentation control,
+    covering strain construction, methanol-inducible expression,
+    high-density fermentation, post-translational modifications
+    (especially proline hydroxylation), and downstream purification
+
+  qa_role_description: |
+    You are an expert scientific assistant specializing in Pichia pastoris
+    (Komagataella phaffii) expression systems and bioprocess engineering.
+
+    Your role is to help researchers design and optimize fermentation
+    experiments to produce recombinant proteins or metabolites with specific:
+      - structures (correct folding, disulfide bonds)
+      - post-translational modifications (glycosylation patterns, hydroxylation, signal cleavage)
+      - biological activities (enzymatic, binding, therapeutic)
+
+  # Per-entity-type hints fed to the entity extractor prompt.
+  entity_hints:
+    strains: |
+      Look for: GS115, X-33, X33, CBS7435, SMD1168, KM71, SMD1165, or
+      Chinese terms like "毕赤酵母菌株", "宿主菌株", "出发菌株".
+    promoters: |
+      Look for: AOX1, AOX2, GAP, FLD1, ICL1, DAS1, DAS2, PEX8, YPT1,
+      or any text mentioning a "启动子".
+    vectors: |
+      Look for: pPIC9K, pPICZ, pGAPZ, pPICZα, pPIC3.5K, or "表达载体" / "质粒".
+    media: |
+      Look for: BMGY, BMMY, BSM, FM21, YPD, or "培养基".
+    target_products: |
+      Recombinant proteins/metabolites the paper aims to produce.
+      Look for: recombinant collagen, hlCOLIII, COL3A1, P4H, HL1, or
+      "重组人源胶原蛋白", "目标产物".
+
+  # Used by the cross-paper normalizer / registry builder.
+  cross_entity_descriptions:
+    strains: Pichia pastoris host strains
+    promoters: transcriptional promoters used in Pichia expression
+    vectors: plasmids and expression vectors
+    target_products: recombinant proteins or metabolites the papers express
+    media: fermentation / culture media
+    process_parameters: bioprocess parameters such as temperature, pH, DO
+    analytical_methods: analytical / characterization methods (SDS-PAGE, BCA, HPLC, etc.)

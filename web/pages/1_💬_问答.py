@@ -13,13 +13,13 @@ st.set_page_config(page_title="问答 · 知识库", page_icon="💬", layout="w
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from _project import use_project_sidebar, get_assistant
-from kb_core.qa import PichiaAssistant
+from kb_core.qa import Assistant
 
 use_project_sidebar()
 
 # ── Session state (per-project assistant + messages) ──────────────────────────
 
-assistant: PichiaAssistant = get_assistant()
+assistant: Assistant = get_assistant()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 

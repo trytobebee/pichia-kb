@@ -15,12 +15,13 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.prompt import Prompt
 
+from .config import load_project_config
 from .knowledge_base import KnowledgeBase
 from .ingestion import (PDFProcessor, KnowledgeExtractor, ProcessKnowledgeSynthesizer,
                         DialecticalReviewer, FigureExtractor, DomainKnowledgeSynthesizer,
                         normalize_all, build_registry, save_registry,
                         ExperimentExtractor, LineageExtractor)
-from .qa import PichiaAssistant
+from .qa import Assistant
 
 app = typer.Typer(
     name="kb",
@@ -51,6 +52,11 @@ def _get_kb(project_dir: Path) -> KnowledgeBase:
     return KnowledgeBase(data_dir=project_dir)
 
 
+def _load_cfg(project_dir: Path):
+    """Load project config; thin wrapper so we have a single import site."""
+    return load_project_config(project_dir)
+
+
 # ── Commands ──────────────────────────────────────────────────────────────────
 
 @app.command()
@@ -62,10 +68,11 @@ def ingest(
 ):
     """Ingest a PDF paper (or all PDFs in a directory) into the knowledge base."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
-    extractor = KnowledgeExtractor(model=model, cache_dir=cache_dir)
-    processor = PDFProcessor(cache_dir=cache_dir)
+    extractor = KnowledgeExtractor(domain=cfg.domain, model=model, cache_dir=cache_dir)
+    processor = PDFProcessor(cache_dir=cache_dir, keywords=cfg.keywords)
 
     pdfs: list[Path] = []
     if pdf.is_dir():
@@ -110,11 +117,12 @@ def add(
     the cross-paper dialectical synthesis.
     """
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
-    extractor = KnowledgeExtractor(model=model, cache_dir=cache_dir)
-    processor = PDFProcessor(cache_dir=cache_dir)
-    synth = ProcessKnowledgeSynthesizer(model=model, cache_dir=cache_dir)
+    extractor = KnowledgeExtractor(domain=cfg.domain, model=model, cache_dir=cache_dir)
+    processor = PDFProcessor(cache_dir=cache_dir, keywords=cfg.keywords)
+    synth = ProcessKnowledgeSynthesizer(domain=cfg.domain, model=model, cache_dir=cache_dir)
 
     pdfs: list[Path] = sorted(pdf.glob("*.pdf")) if pdf.is_dir() else [pdf]
     if not pdfs:
@@ -150,6 +158,7 @@ def status(
 ):
     """Show knowledge base statistics."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     _print_summary(kb)
 
@@ -161,6 +170,7 @@ def normalize(
 ):
     """Layer 3.5: deduplicate and merge entities within each paper's extraction JSON."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     structured_dir = data_dir / "structured"
     verb = "Would remove" if dry_run else "Removed"
 
@@ -227,6 +237,7 @@ def build_registry_cmd(
 ):
     """Layer 3.5: build cross-paper entity registry (rule-based + LLM synonym clustering)."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     structured_dir = data_dir / "structured"
     console.print(Panel(
         "Building cross-paper entity registry.\n"
@@ -236,7 +247,7 @@ def build_registry_cmd(
         title="Entity Registry",
     ))
 
-    registry = build_registry(structured_dir=structured_dir, model=model)
+    registry = build_registry(structured_dir=structured_dir, expert_field=cfg.domain.expert_field, entity_descriptions=cfg.domain.cross_entity_descriptions, model=model)
     out_path = save_registry(registry, structured_dir)
 
     table = Table(title="Registry summary", show_lines=True)
@@ -270,6 +281,7 @@ def entities(
 ):
     """List extracted entities of a given type."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     items = kb.get_entities(entity_type)
     if not items:
@@ -306,6 +318,7 @@ def search(
 ):
     """Semantic search in the vector store (show raw retrieved chunks)."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     hits = kb.semantic_search(query, n=n)
     if not hits:
@@ -327,13 +340,14 @@ def chat(
     model: str = typer.Option("gemini-2.5-flash", help="Claude model for Q&A"),
     n_chunks: int = typer.Option(6, help="Number of context chunks to retrieve"),
 ):
-    """Interactive Q&A session with the Pichia assistant."""
+    """Interactive Q&A session for the project."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    assistant = PichiaAssistant(kb=kb, model=model, n_chunks=n_chunks)
+    assistant = Assistant(kb=kb, domain=cfg.domain, model=model, n_chunks=n_chunks)
 
     console.print(Panel(
-        "[bold]PichiaGPT[/bold] — Pichia pastoris experimental assistant\n"
+        f"[bold]{cfg.name}[/bold] — interactive Q&A\n"
         "Type your question. Commands: [yellow]/reset[/yellow] (clear history), "
         "[yellow]/quit[/yellow] (exit).",
         style="green",
@@ -377,8 +391,9 @@ def ask(
 ):
     """Ask a single question (non-interactive)."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    assistant = PichiaAssistant(kb=kb, model=model, n_chunks=n_chunks)
+    assistant = Assistant(kb=kb, domain=cfg.domain, model=model, n_chunks=n_chunks)
     console.print("[bold green]Answer:[/bold green]")
     assistant.ask(question, stream=True)
 
@@ -391,8 +406,9 @@ def synthesize(
 ):
     """Extract fermentation control principles and protocols from papers."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    synth = ProcessKnowledgeSynthesizer(model=model, cache_dir=data_dir / "cache")
+    synth = ProcessKnowledgeSynthesizer(domain=cfg.domain, model=model, cache_dir=data_dir / "cache")
 
     pdfs: list[Path] = sorted(pdf.glob("*.pdf")) if pdf.is_dir() else [pdf]
     if not pdfs:
@@ -429,6 +445,7 @@ def review(
 ):
     """Cross-paper dialectical review: find consensus, contradictions, and uncertainties."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
 
     pk_raw = kb.structured_store._load_pk_raw()
@@ -444,7 +461,7 @@ def review(
         title="Dialectical Review",
     ))
 
-    reviewer = DialecticalReviewer(model=model)
+    reviewer = DialecticalReviewer(domain=cfg.domain, model=model)
     dr = reviewer.review(pk_raw)
     kb.ingest_dialectical_review(dr)
 
@@ -482,6 +499,7 @@ def show_review(
 ):
     """Display the stored dialectical review."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     dr = kb.get_dialectical_review()
     if not dr:
@@ -549,6 +567,7 @@ def principles(
 ):
     """List synthesized process control knowledge."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     items = kb.get_process_knowledge(category)
     if not items:
@@ -579,9 +598,11 @@ def extract_figures(
 ):
     """Extract figures from PDFs: save images + structured data (data points, trends, conclusions)."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     figures_dir = data_dir / "figures"
     extractor = FigureExtractor(
+            domain=cfg.domain,
         figures_dir=figures_dir, model=model, cache_dir=data_dir / "cache"
     )
 
@@ -653,8 +674,10 @@ def refine_figures_cmd(
     miscounted bar groups. Combines visual bar-counting with text-derived expected categories.
     """
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     extractor = FigureExtractor(
+            domain=cfg.domain,
         figures_dir=data_dir / "figures", model=model, cache_dir=data_dir / "cache"
     )
 
@@ -752,8 +775,9 @@ def extract_experiments(
 ):
     """Extract structured experiment runs (parameter snapshots + outcome + figure links) from papers."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    extractor = ExperimentExtractor(model=model, cache_dir=data_dir / "cache")
+    extractor = ExperimentExtractor(domain=cfg.domain, model=model, cache_dir=data_dir / "cache")
 
     pdfs: list[Path] = sorted(pdf.glob("*.pdf")) if pdf.is_dir() else [pdf]
     if not pdfs:
@@ -789,8 +813,9 @@ def extract_lineage(
 ):
     """Extract intra-paper experiment lineage (parent → child edges) and persist on PaperExperiments."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
-    extractor = LineageExtractor(model=model)
+    extractor = LineageExtractor(domain=cfg.domain, model=model)
 
     all_papers = kb.structured_store.load_all_experiments()
     if not all_papers:
@@ -831,6 +856,7 @@ def experiments(
 ):
     """Browse extracted experiment runs."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     all_papers = kb.structured_store.load_all_experiments()
     if source:
@@ -888,6 +914,7 @@ def figures(
 ):
     """Browse extracted figure data and their quantitative results."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     all_figs = kb.structured_store.load_figures()
 
@@ -959,9 +986,10 @@ def domain_knowledge_cmd(
 ):
     """Synthesize cross-paper domain knowledge: proteins, substrates, yields, challenges, innovations."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     papers_dir = data_dir / "papers"
     kb = _get_kb(data_dir)
-    synth = DomainKnowledgeSynthesizer(model=model, cache_dir=data_dir / "cache")
+    synth = DomainKnowledgeSynthesizer(domain=cfg.domain, model=model, cache_dir=data_dir / "cache")
 
     console.print(Panel(
         f"Synthesizing domain knowledge from [bold]{papers_dir}[/bold]",
@@ -1039,6 +1067,7 @@ def show_domain(
 ):
     """Display stored domain knowledge."""
     data_dir = _resolve_project(project)
+    cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     data = kb.structured_store.load_domain_knowledge()
     if not data:
@@ -1052,7 +1081,7 @@ def show_domain(
         f"Domain Knowledge  [dim]{data.get('synthesis_date', '')}[/dim]\n"
         f"Papers: {len(data.get('papers_analyzed', []))}",
         style="magenta",
-        title="Pichia × Collagen Domain Knowledge",
+        title=f"{cfg.name} — Domain Knowledge",
     ))
 
     for protein in data.get("target_proteins", []):

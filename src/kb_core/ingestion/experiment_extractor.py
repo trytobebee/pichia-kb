@@ -27,24 +27,23 @@ from ..schema.experiments import (
     ExperimentRun, ExperimentGoal, StrainConstruct,
     FermentationSetup, PhaseParams, ExperimentOutcome, PaperExperiments,
 )
+from ..config import DomainContext
 from .pdf_text import read_pdf_text
 
 
 _EXPERIMENT_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris (毕赤酵母) bioprocess engineering. Your task
-is to read a research paper and enumerate every distinct fermentation/expression
-experiment it describes, capturing each as a complete 工艺单 (parameter snapshot).
+You are an expert in {field_summary}. Your task
+is to read a research paper and enumerate every distinct experiment it describes,
+capturing each as a complete parameter snapshot (工艺单).
 
 Each experiment is the unit at which an engineer would reproduce the work — it
-includes the strain/vector construct, fermentation setup (scale, medium, inoculum),
-the parameters of each fermentation phase (initial batch / fed-batch / starvation /
-methanol induction / etc.), the reported outcome (max yield, biomass, time-to-peak),
-and a back-reference to any figures whose curves quantify this experiment.
+includes the construct / setup (scale, medium, inoculum), the parameters of each
+phase, the reported outcome (max yield, biomass, time-to-peak), and a back-reference
+to any figures whose curves quantify this experiment.
 
-Multiple distinct experiments commonly appear: shake-flask screening, scale-up to
-5 L bioreactor, methanol feed strategy comparison, signal-peptide variants, etc.
-Each is its own ExperimentRun. Do NOT merge experiments that differ in any varied
-parameter.
+Multiple distinct experiments commonly appear (screening, scale-up, parameter sweeps,
+etc.). Each is its own ExperimentRun. Do NOT merge experiments that differ in any
+varied parameter.
 
 Papers may be in Chinese or English. Extract everything regardless of language.
 Return ONLY valid JSON. Be quantitative. If a value is not stated, use null or [].
@@ -172,6 +171,7 @@ class ExperimentExtractor:
 
     def __init__(
         self,
+        domain: DomainContext,
         model: str = "gemini-2.5-pro",
         cache_dir: Path | None = None,
         max_text_chars: int = 200_000,
@@ -184,6 +184,8 @@ class ExperimentExtractor:
         self.model = model
         self.cache_dir = cache_dir
         self.max_text_chars = max_text_chars
+        self.domain = domain
+        self._system = _EXPERIMENT_SYSTEM.format(field_summary=domain.field_summary)
 
     def extract_from_pdf(
         self,
@@ -215,7 +217,7 @@ class ExperimentExtractor:
                     model=self.model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        system_instruction=_EXPERIMENT_SYSTEM,
+                        system_instruction=self._system,
                         max_output_tokens=32768,
                         temperature=0.1,
                         response_mime_type="application/json",

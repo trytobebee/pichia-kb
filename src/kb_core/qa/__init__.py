@@ -1,3 +1,3 @@
-from .assistant import PichiaAssistant
+from .assistant import Assistant
 
-__all__ = ["PichiaAssistant"]
+__all__ = ["Assistant"]

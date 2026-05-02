@@ -25,7 +25,7 @@ def _yield_to_numeric(yield_str: str | None) -> float:
 
 
 class KnowledgeBase:
-    """Unified interface for adding and retrieving Pichia pastoris knowledge."""
+    """Unified interface for a single project's knowledge: vector store + structured store."""
 
     def __init__(self, data_dir: Path) -> None:
         self.vector_store = VectorStore(db_path=data_dir / "db")

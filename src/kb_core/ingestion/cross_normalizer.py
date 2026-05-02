@@ -39,9 +39,11 @@ _ENTITY_KEY: dict[str, str] = {
 # (high name variation, mixed languages, abbreviations)
 _LLM_CLUSTER_TYPES = {"target_products", "analytical_methods", "promoters"}
 
-_ENTITY_TYPE_DESC: dict[str, str] = {
-    "strains":            "Pichia pastoris host strains",
-    "promoters":          "transcriptional promoters used in Pichia expression",
+# Default human-readable descriptions per entity type. Project config can
+# override via DomainContext.cross_entity_descriptions.
+_DEFAULT_ENTITY_TYPE_DESC: dict[str, str] = {
+    "strains":            "host strains",
+    "promoters":          "transcriptional promoters",
     "vectors":            "expression vectors / plasmids",
     "media":              "culture media formulations",
     "target_products":    "target recombinant proteins or metabolites",
@@ -82,8 +84,8 @@ def _rule_groups(entities: list[dict], key_field: str) -> dict[str, list[dict]]:
 
 # ── LLM synonym clustering ────────────────────────────────────────────────────
 
-_SYN_SYSTEM = (
-    "You are an expert in Pichia pastoris molecular biology and bioprocess engineering. "
+_SYN_SYSTEM_TEMPLATE = (
+    "You are an expert in {expert_field}. "
     "Answer only with valid JSON — no explanation, no markdown fences."
 )
 
@@ -95,7 +97,7 @@ Grouping rules:
 - Same entity = different spelling, language, abbreviation, or notation
   (e.g. "SDS-PAGE" = "SDS-PAGE电泳" = "SDS-PAGE analysis", "AOX1" = "P_AOX1" = "AOX1 promoter")
 - Do NOT group related-but-distinct entities
-  (e.g. "collagen" and "type III collagen" are different specificity levels — keep separate)
+  (e.g. a generic category and a specific subtype are different — keep separate)
 - Singletons (no synonym) are valid groups
 - Every input name must appear in exactly one group
 
@@ -114,6 +116,8 @@ def _llm_cluster(
     key_field: str,
     client: genai.Client,
     model: str,
+    expert_field: str,
+    entity_desc: str,
 ) -> dict[str, list[str]]:
     """Ask the LLM to merge synonymous norm_keys among cross-paper candidates.
 
@@ -140,7 +144,7 @@ def _llm_cluster(
 
     names_block = "\n".join(f"- {display}" for display in norm_to_display.values())
     prompt = _SYN_PROMPT.format(
-        entity_desc=_ENTITY_TYPE_DESC.get(entity_type, entity_type),
+        entity_desc=entity_desc,
         names=names_block,
     )
 
@@ -149,7 +153,7 @@ def _llm_cluster(
             model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=_SYN_SYSTEM,
+                system_instruction=_SYN_SYSTEM_TEMPLATE.format(expert_field=expert_field),
                 max_output_tokens=8192,
                 temperature=0.1,
             ),
@@ -222,10 +226,19 @@ def _merge_cross_paper(entities: list[dict], key_field: str) -> dict[str, Any]:
 
 def build_registry(
     structured_dir: Path,
+    expert_field: str,
+    entity_descriptions: dict[str, str] | None = None,
     model: str = "gemini-2.5-flash",
 ) -> dict:
-    """Build and return the cross-paper entity registry dict."""
+    """Build and return the cross-paper entity registry dict.
+
+    `expert_field` is injected into the LLM clustering prompt; pass the
+    project's `domain.expert_field`. `entity_descriptions` (defaults to
+    framework-generic) override the human-readable descriptions used in
+    the prompt.
+    """
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    descs = {**_DEFAULT_ENTITY_TYPE_DESC, **(entity_descriptions or {})}
 
     print("Collecting entities from per-paper JSONs...")
     all_entities = _collect(structured_dir)
@@ -247,7 +260,11 @@ def build_registry(
         # Step 2: LLM synonym clustering (only for high-variation types)
         if etype in _LLM_CLUSTER_TYPES and len(norm_groups) > 1:
             print(f" → LLM clustering...", end="", flush=True)
-            cluster_map = _llm_cluster(etype, norm_groups, key_field, client, model)
+            cluster_map = _llm_cluster(
+                etype, norm_groups, key_field, client, model,
+                expert_field=expert_field,
+                entity_desc=descs.get(etype, etype),
+            )
         else:
             cluster_map = {nk: [nk] for nk in norm_groups}
 

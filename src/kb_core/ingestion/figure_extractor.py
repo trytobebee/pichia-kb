@@ -25,9 +25,9 @@ from .pdf_text import read_pdf_text
 
 
 _FIGURE_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris bioprocess engineering and experimental data analysis.
+You are an expert in {field_summary} and experimental data analysis.
 Your task is to extract ALL quantitative information from a research figure or table,
-structured so that an engineer can select process parameters for industrial fermentation.
+structured so that an engineer can select process parameters from it.
 
 Papers may be in Chinese or English. Extract everything regardless of language.
 Return ONLY valid JSON matching the schema provided. Be as quantitative as possible.
@@ -35,7 +35,7 @@ If exact values cannot be read, give your best estimate and note the uncertainty
 """).strip()
 
 _FIGURE_PROMPT = textwrap.dedent("""
-Analyze this figure/table from a Pichia pastoris research paper and extract structured data.
+Analyze this figure/table from a research paper and extract structured data.
 
 CONTEXT:
 - Source paper: {source_file}
@@ -142,6 +142,7 @@ class FigureExtractor:
     def __init__(
         self,
         figures_dir: Path,
+        domain,  # DomainContext, kept untyped to avoid circular import
         model: str = "gemini-2.5-flash",
         dpi: int = 150,
         cache_dir: Path | None = None,
@@ -152,6 +153,8 @@ class FigureExtractor:
         self.dpi = dpi
         self.cache_dir = cache_dir
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.domain = domain
+        self._system = _FIGURE_SYSTEM.format(field_summary=domain.field_summary)
 
     # ── public ───────────────────────────────────────────────────────────────
 
@@ -364,7 +367,7 @@ class FigureExtractor:
         # dynamic thinking on Flash too — counting bars + aligning to a prior list
         # benefits from reasoning.
         gen_config_kwargs = {
-            "system_instruction": _FIGURE_SYSTEM,
+            "system_instruction": self._system,
             "max_output_tokens": 8192,
             "temperature": 0.1,
         }

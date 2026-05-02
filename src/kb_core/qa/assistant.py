@@ -1,4 +1,9 @@
-"""RAG-powered Q&A assistant for Pichia pastoris experiments, using Gemini."""
+"""RAG-powered Q&A assistant, using Gemini.
+
+Domain expertise is supplied per-project via DomainContext. The
+guidelines below are framework-generic; the role description
+("You are an expert in ...") comes from the project config.
+"""
 
 from __future__ import annotations
 
@@ -8,28 +13,21 @@ import textwrap
 from google import genai
 from google.genai import types
 
+from ..config import DomainContext
 from ..knowledge_base import KnowledgeBase
 
 
-_SYSTEM_PROMPT = textwrap.dedent("""
-You are PichiaGPT, an expert scientific assistant specializing in Pichia pastoris
-(Komagataella phaffii) expression systems and bioprocess engineering.
-
-Your role is to help researchers design and optimize fermentation experiments
-to produce recombinant proteins or metabolites with specific:
-  - structures (correct folding, disulfide bonds)
-  - post-translational modifications (glycosylation patterns, hydroxylation, signal cleavage)
-  - biological activities (enzymatic, binding, therapeutic)
+_SYSTEM_PROMPT_TEMPLATE = textwrap.dedent("""
+{role_description}
 
 Guidelines:
 1. Be precise and cite the source papers/sections when you use retrieved context.
 2. Distinguish clearly between information from the provided papers vs. general knowledge.
-3. When recommending parameters (e.g., temperature, pH, methanol feed rate), state
-   the rationale and the trade-offs.
+3. When recommending parameters, state the rationale and the trade-offs.
 4. If the question cannot be answered from available context, say so clearly and
    indicate what additional information would be needed.
 5. For experimental design advice, provide step-by-step recommendations where possible.
-6. Use SI units and standard biochemical notation.
+6. Use SI units and standard notation appropriate to the field.
 7. Answer in the same language as the question (Chinese or English).
 """).strip()
 
@@ -49,28 +47,34 @@ If the context is insufficient, supplement with your general expertise and say s
 
 _NO_CONTEXT_TEMPLATE = textwrap.dedent("""
 NOTE: No highly relevant passages were found in the knowledge base for this question.
-The answer below is based on general Pichia pastoris expertise.
+The answer below is based on general expertise.
 
 USER QUESTION:
 {question}
 """).strip()
 
 
-class PichiaAssistant:
+class Assistant:
     """Interactive Q&A assistant backed by the knowledge base."""
 
     def __init__(
         self,
         kb: KnowledgeBase,
+        domain: DomainContext,
         model: str = "gemini-2.5-flash",
         n_chunks: int = 6,
     ) -> None:
         self.kb = kb
+        self.domain = domain
         self.model = model
         self.n_chunks = n_chunks
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         # Gemini uses "model" role (not "assistant") and plain text parts
         self._history: list[types.Content] = []
+        self._system = _SYSTEM_PROMPT_TEMPLATE.format(
+            role_description=domain.qa_role_description.strip()
+            or f"You are an expert in {domain.expert_field}."
+        )
 
     def ask(self, question: str, stream: bool = True) -> str:
         """Ask a question, optionally streaming. Returns the full answer."""
@@ -108,7 +112,7 @@ class PichiaAssistant:
             model=self.model,
             contents=self._history,
             config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
+                system_instruction=self._system,
                 max_output_tokens=4096,
                 temperature=0.2,
             ),
@@ -132,7 +136,7 @@ class PichiaAssistant:
             model=self.model,
             contents=self._history,
             config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
+                system_instruction=self._system,
                 max_output_tokens=4096,
                 temperature=0.2,
             ),
@@ -148,7 +152,7 @@ class PichiaAssistant:
             model=self.model,
             contents=self._history,
             config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_PROMPT,
+                system_instruction=self._system,
                 max_output_tokens=4096,
                 temperature=0.2,
             ),

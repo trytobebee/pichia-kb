@@ -17,12 +17,12 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from ..config import DomainContext
 from ..schema.dialectical import DialecticalReview
 
 
 _REVIEW_SYSTEM = textwrap.dedent("""
-You are a senior scientist and systematic reviewer specialising in Pichia pastoris
-bioprocess engineering and recombinant collagen production.
+You are a senior scientist and systematic reviewer specialising in {field_summary}.
 
 Your task is to perform a rigorous cross-paper dialectical analysis:
   1. Compare what multiple papers say about the same experimental topics.
@@ -40,7 +40,7 @@ Return ONLY valid JSON. No markdown fences. No explanation outside JSON.
 
 _REVIEW_PROMPT = textwrap.dedent("""
 Below is all the process control knowledge extracted from {n_papers} research papers
-on Pichia pastoris collagen expression. The papers cover: {paper_list}.
+on {paper_topic}. The papers cover: {paper_list}.
 
 Perform a dialectical cross-paper review. Identify the key experimental topics,
 then for each topic synthesize consensus and conflict across papers.
@@ -72,7 +72,7 @@ Return a JSON object matching this schema exactly:
           "consensus_claim": "unified statement all supporting papers agree on",
           "recommended_value": "specific value or range",
           "evidence_strength": "high|medium|low|conflicting|uncertain",
-          "applies_to": ["collagen", "general"],
+          "applies_to": ["specific product name", "general"],
           "practical_implication": "what this means for experiment design",
           "supporting_papers": [
             {{
@@ -105,16 +105,9 @@ Return a JSON object matching this schema exactly:
   ]
 }}
 
-Cover at minimum these topic areas (add more if the data supports them):
-- Induction Temperature
-- pH Control
-- Dissolved Oxygen (DO)
-- Methanol Feed Strategy
-- P4H Co-expression for Hydroxylation
-- Proteolysis Prevention
-- Promoter Selection (AOX1 vs alternatives)
-- Copy Number and Genomic Integration
-- Product Yield and Titer
+Identify the most important topic areas from the actual content of the
+extracted knowledge below. Pick at least the recurring themes that appear
+in multiple papers.
 
 === EXTRACTED PROCESS KNOWLEDGE FROM ALL PAPERS ===
 
@@ -125,9 +118,11 @@ Cover at minimum these topic areas (add more if the data supports them):
 class DialecticalReviewer:
     """Performs cross-paper dialectical synthesis of process knowledge."""
 
-    def __init__(self, model: str = "gemini-2.5-pro") -> None:
+    def __init__(self, domain: DomainContext, model: str = "gemini-2.5-pro") -> None:
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         self.model = model
+        self.domain = domain
+        self._system = _REVIEW_SYSTEM.format(field_summary=domain.field_summary)
 
     def review(self, all_process_knowledge: list[dict]) -> DialecticalReview:
         """
@@ -145,6 +140,7 @@ class DialecticalReviewer:
         prompt = _REVIEW_PROMPT.format(
             n_papers=len(papers),
             paper_list=", ".join(papers),
+            paper_topic=self.domain.paper_topic,
             today=date.today().isoformat(),
             knowledge_dump=knowledge_dump,
         )
@@ -154,7 +150,7 @@ class DialecticalReviewer:
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=_REVIEW_SYSTEM,
+                system_instruction=self._system,
                 max_output_tokens=16384,
                 temperature=0.15,
             ),

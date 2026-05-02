@@ -16,6 +16,7 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from ..config import DomainContext
 from ..schema.process_knowledge import (
     ControlPrinciple, ProcessStageSpec, FermentationProtocol,
     TroubleshootingEntry, ProductQualityFactor,
@@ -25,9 +26,9 @@ from .pdf_text import read_pdf_text
 
 
 _SYNTHESIS_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris bioprocess engineering and fermentation control.
+You are an expert in {field_summary}.
 Your task is to read research paper content and extract actionable control knowledge —
-the principles, protocols, and quality factors that help engineers control fermentation
+the principles, protocols, and quality factors that help engineers control process
 outcomes (product yield, structure, modification, activity).
 
 Papers may be in Chinese or English. Extract knowledge regardless of language.
@@ -35,7 +36,7 @@ Return ONLY valid JSON. Be specific and quantitative wherever the text supports 
 """).strip()
 
 _SYNTHESIS_PROMPT = textwrap.dedent("""
-Read the following Pichia pastoris research paper content and extract process control knowledge.
+Read the following research paper content and extract process control knowledge.
 Return a JSON object with these keys (omit any key with an empty array):
 
 {{
@@ -50,7 +51,7 @@ Return a JSON object with these keys (omit any key with an empty array):
       "target_value": "specific value or range if mentioned",
       "consequence_if_ignored": "what goes wrong",
       "priority": "critical|important|advisory",
-      "applies_to_product": ["collagen", "general", etc.]
+      "applies_to_product": ["specific product name", "general", etc.]
     }}
   ],
 
@@ -120,12 +121,15 @@ class ProcessKnowledgeSynthesizer:
 
     def __init__(
         self,
+        domain: DomainContext,
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
     ) -> None:
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         self.model = model
         self.cache_dir = cache_dir
+        self.domain = domain
+        self._system = _SYNTHESIS_SYSTEM.format(field_summary=domain.field_summary)
 
     def synthesize(self, full_text: str, source_file: str) -> dict:
         """Return raw dict of synthesized process knowledge."""
@@ -138,7 +142,7 @@ class ProcessKnowledgeSynthesizer:
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=_SYNTHESIS_SYSTEM,
+                system_instruction=self._system,
                 max_output_tokens=16384,
                 temperature=0.1,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),

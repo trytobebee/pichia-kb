@@ -27,17 +27,18 @@ from ..schema.experiments import (
     ExperimentRun,
     PaperExperiments,
 )
+from ..config import DomainContext
 
 
 _LINEAGE_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris bioprocess engineering. Your task is to
+You are an expert in {field_summary}. Your task is to
 read a list of experiments extracted from one paper and identify the narrative
 relationships between them — which experiment builds on which, and how.
 
-Most thesis-style papers describe a sequential optimization: signal-peptide
-screening → copy-number tuning → chaperone co-expression → scale-up to bioreactor.
-The "best" strain or condition from each stage is typically carried into the
-next stage. Your job is to make these implicit dependencies explicit as edges.
+Most thesis-style papers describe a sequential optimization: parameter A screening
+→ parameter B tuning → component co-expression → scale-up. The "best" strain or
+condition from each stage is typically carried into the next stage. Your job is
+to make these implicit dependencies explicit as edges.
 
 Be conservative. Only emit an edge when the evidence (parent_strain text,
 fixed_parameters citing earlier results, or sequential section numbering with a
@@ -135,6 +136,7 @@ class LineageExtractor:
 
     def __init__(
         self,
+        domain: DomainContext,
         model: str = "gemini-2.5-pro",
         request_timeout_ms: int = 600_000,
     ) -> None:
@@ -143,6 +145,8 @@ class LineageExtractor:
             http_options=types.HttpOptions(timeout=request_timeout_ms),
         )
         self.model = model
+        self.domain = domain
+        self._system = _LINEAGE_SYSTEM.format(field_summary=domain.field_summary)
 
     def extract(self, paper_exps: PaperExperiments) -> list[ExperimentLineageEdge]:
         if len(paper_exps.experiments) < 2:
@@ -165,7 +169,7 @@ class LineageExtractor:
                     model=self.model,
                     contents=prompt,
                     config=types.GenerateContentConfig(
-                        system_instruction=_LINEAGE_SYSTEM,
+                        system_instruction=self._system,
                         max_output_tokens=8192,
                         temperature=0.1,
                         response_mime_type="application/json",

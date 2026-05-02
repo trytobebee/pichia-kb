@@ -11,13 +11,14 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from ..config import DomainContext
 from ..schema import ExtractionResult, KnowledgeChunk
 from .pdf_processor import PDFProcessor
 
 
 _EXTRACTION_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris (Komagataella phaffii) / 毕赤酵母 molecular biology
-and bioprocess engineering. Extract structured knowledge from research paper text.
+You are an expert in {expert_field}. Extract structured knowledge from research
+paper text.
 
 The papers may be written in Chinese, English, or both. Extract ALL relevant entities
 regardless of language. Be precise and faithful to the source text.
@@ -26,13 +27,12 @@ If a field value is not mentioned, omit it or use null.
 """).strip()
 
 _EXTRACTION_PROMPT_TEMPLATE = textwrap.dedent("""
-Extract structured Pichia pastoris (毕赤酵母) knowledge from the text below.
+Extract structured knowledge from the text below.
 Return a JSON object. Only include keys that have data; omit empty arrays.
 
 === SCHEMA ===
 
-"strains": list of host strains (菌株). Look for: GS115, X-33, X33, CBS7435, SMD1168,
-  KM71, SMD1165, or any text like "毕赤酵母菌株", "宿主菌株", "出发菌株".
+"strains": list of host strains. {strains_hint}
   {{
     "name": "strain name",
     "genotype": "genetic markers, e.g. his4, Mut+, Muts",
@@ -41,8 +41,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": "any relevant detail"
   }}
 
-"promoters": transcriptional promoters (启动子). Look for: AOX1、AOX2、GAP、DAS1、
-  DAS2、FLD1、PEX8 or terms like "启动子", "promoter", "P_AOX1", "PAOX1".
+"promoters": transcriptional promoters. {promoters_hint}
   {{
     "name": "promoter name",
     "expression_type": "constitutive | inducible | hybrid",
@@ -51,8 +50,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": "key characteristics"
   }}
 
-"vectors": expression vectors / plasmids (表达载体/质粒). Look for: pPICZα, pGAPZ,
-  pPIC9K, pAO815, pHIL-D2, or terms like "表达载体", "重组质粒", "重组载体".
+"vectors": expression vectors / plasmids. {vectors_hint}
   {{
     "name": "vector name",
     "promoter": "promoter used",
@@ -62,8 +60,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": "key features"
   }}
 
-"media": culture media (培养基). Look for: BMMY、BMGY、YPD、MD、MM、FM22、BSM、
-  or terms like "培养基", "发酵培养基", "诱导培养基".
+"media": culture / fermentation media. {media_hint}
   {{
     "name": "medium name",
     "composition": {{"component": "amount/concentration"}},
@@ -74,9 +71,8 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": ""
   }}
 
-"fermentation_conditions": process parameters for each phase (发酵工艺条件).
-  Look for temperature (温度), pH, DO (溶氧), agitation (转速/搅拌), feed strategy (流加策略),
-  methanol induction (甲醇诱导), glycerol batch (甘油批培养), induction time (诱导时间).
+"fermentation_conditions": process parameters for each phase.
+  Look for temperature, pH, DO, agitation, feed strategy, induction time, etc.
   {{
     "phase": "e.g. glycerol batch / methanol induction",
     "mode": "batch | fed-batch | continuous | methanol_induction",
@@ -89,8 +85,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": "other relevant details"
   }}
 
-"glycosylation_patterns": glycosylation info (糖基化). Look for: N-糖基化、O-糖基化、
-  高甘露糖、甘露糖基化、glycosylation, mannose, OCH1 knockout.
+"glycosylation_patterns": glycosylation info (N-linked, O-linked, mannosylation, etc.).
   {{
     "glycosylation_type": "N-linked | O-linked | none",
     "typical_glycan_structure": "e.g. high-mannose Man8-14",
@@ -99,11 +94,10 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": ""
   }}
 
-"target_products": recombinant proteins or metabolites being produced (目标产物).
-  Look for: 胶原蛋白、collagen、重组蛋白、目的蛋白、产物, or specific protein names.
+"target_products": recombinant proteins or metabolites being produced. {target_products_hint}
   {{
     "name": "product name",
-    "type": "enzyme | collagen | antibody fragment | VLP | metabolite | other",
+    "type": "enzyme | antibody fragment | VLP | metabolite | structural protein | other",
     "gene_source": "origin organism",
     "codon_optimized": true | false | null,
     "molecular_weight_kda": number or null,
@@ -113,8 +107,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": ""
   }}
 
-"process_parameters": quantitative process parameters (过程参数). Look for: qP (比生产速率)、
-  qMeOH (甲醇消耗速率)、μ (比生长速率)、OD600 (光密度)、DCW (干细胞重)、titer (效价).
+"process_parameters": quantitative process parameters (yield, growth rate, density, etc.).
   {{
     "parameter_name": "full name",
     "symbol": "e.g. qP, μ, DCW",
@@ -125,8 +118,7 @@ Return a JSON object. Only include keys that have data; omit empty arrays.
     "notes": ""
   }}
 
-"analytical_methods": characterization methods (分析方法). Look for: SDS-PAGE、
-  Western blot、ELISA、HPLC、LC-MS、circular dichroism (CD)、胶原蛋白特异性检测.
+"analytical_methods": characterization / analytical methods (SDS-PAGE, HPLC, etc.).
   {{
     "name": "method name",
     "purpose": "what it measures",
@@ -150,9 +142,11 @@ class KnowledgeExtractor:
 
     def __init__(
         self,
+        domain: DomainContext,
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
         request_timeout_ms: int = 120_000,
+        keywords: list[str] | None = None,
     ) -> None:
         # Without an explicit timeout the SDK can hang indefinitely on a
         # stalled connection — we lost a 70-min ingest run to this on
@@ -162,7 +156,9 @@ class KnowledgeExtractor:
             http_options=types.HttpOptions(timeout=request_timeout_ms),
         )
         self.model = model
-        self.pdf_processor = PDFProcessor(cache_dir=cache_dir)
+        self.domain = domain
+        self.pdf_processor = PDFProcessor(cache_dir=cache_dir, keywords=keywords or [])
+        self._system = _EXTRACTION_SYSTEM.format(expert_field=domain.expert_field)
 
     def extract_from_pdf(self, pdf_path: Path, source_ref: str | None = None) -> ExtractionResult:
         chunks = self.pdf_processor.process(pdf_path)
@@ -190,17 +186,23 @@ class KnowledgeExtractor:
     # ── private ──────────────────────────────────────────────────────────────
 
     def _extract_chunk(self, chunk: KnowledgeChunk) -> dict | None:
+        hints = self.domain.entity_hints
         prompt = _EXTRACTION_PROMPT_TEMPLATE.format(
             section=chunk.section or "unknown",
             source_file=chunk.source_file,
             text=chunk.content,
+            strains_hint=hints.get("strains", ""),
+            promoters_hint=hints.get("promoters", ""),
+            vectors_hint=hints.get("vectors", ""),
+            media_hint=hints.get("media", ""),
+            target_products_hint=hints.get("target_products", ""),
         )
         try:
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    system_instruction=_EXTRACTION_SYSTEM,
+                    system_instruction=self._system,
                     max_output_tokens=8192,
                     temperature=0.1,
                 ),

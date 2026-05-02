@@ -32,20 +32,8 @@ _SECTION_RE = re.compile(
     re.IGNORECASE,
 )
 
-_PICHIA_KEYWORDS = [
-    # English
-    "pichia", "komagataella", "pastoris", "phaffii",
-    "AOX1", "GAP", "methanol", "glycerol", "his4",
-    "alpha-MF", "secretion", "glycosylation", "N-linked", "O-linked",
-    "fed-batch", "fermentation", "expression", "induction",
-    "promoter", "vector", "plasmid", "codon", "signal peptide",
-    "disulfide", "yield", "titer", "DO", "pH", "qP", "qMeOH",
-    # Chinese
-    "毕赤酵母", "巴氏毕赤", "甲醇", "启动子", "发酵", "诱导", "胶原蛋白",
-    "重组蛋白", "表达", "质粒", "载体", "菌株", "培养基", "溶氧", "转速",
-    "甘油", "分泌", "糖基化", "羟基化", "纯化", "活性", "产量", "拷贝数",
-    "信号肽", "共表达", "脯氨酸", "羟化酶", "工程菌", "氨基酸",
-]
+# Domain keywords are now per-project; loaded from project config
+# (data/projects/<slug>/config.yaml: keywords). Empty default = match nothing.
 
 # Preferred natural break points, in priority order. Chunking will try to
 # end at one of these within the trailing half of a chunk window so the LLM
@@ -67,10 +55,12 @@ class PDFProcessor:
         chunk_size: int = 1800,
         overlap: int = 250,
         cache_dir: Path | None = None,
+        keywords: list[str] | None = None,
     ) -> None:
         self.chunk_size = chunk_size
         self.overlap = overlap
         self.cache_dir = cache_dir
+        self.keywords = keywords or []
 
     def process(self, pdf_path: Path) -> list[KnowledgeChunk]:
         """Return a list of KnowledgeChunk objects from the PDF."""
@@ -150,4 +140,4 @@ class PDFProcessor:
 
     def _extract_keywords(self, text: str) -> list[str]:
         lower = text.lower()
-        return [kw for kw in _PICHIA_KEYWORDS if kw.lower() in lower]
+        return [kw for kw in self.keywords if kw.lower() in lower]

@@ -18,21 +18,21 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 
+from ..config import DomainContext
 from .pdf_text import read_pdf_text
 
 
 _DOMAIN_SYSTEM = textwrap.dedent("""
-You are an expert in Pichia pastoris bioprocess engineering with deep knowledge of
-recombinant collagen production. You synthesize insights across multiple research papers
-to build actionable domain knowledge for industrial fermentation engineers.
+You are an expert in {field_summary}. You synthesize insights across multiple
+research papers to build actionable domain knowledge for engineers and researchers.
 
 Papers may be in Chinese or English. Extract everything regardless of language.
 Be quantitative wherever possible. Return ONLY valid JSON.
 """).strip()
 
 _DOMAIN_PROMPT = textwrap.dedent("""
-You are given summaries / full text from {n_papers} research papers on Pichia pastoris
-recombinant collagen production. Synthesize cross-paper domain knowledge.
+You are given summaries / full text from {n_papers} research papers on
+{paper_topic}. Synthesize cross-paper domain knowledge.
 
 Return a JSON object with exactly these keys:
 
@@ -41,12 +41,12 @@ Return a JSON object with exactly these keys:
     {{
       "name": "protein name (Chinese or English)",
       "aliases": ["other names used"],
-      "protein_type": "full-length | fragment | human-like",
-      "collagen_type": "I | II | III | null",
-      "sequence_origin": "human gene | engineered | spliced fragment",
+      "protein_type": "full-length | fragment | engineered variant",
+      "subtype": "domain-specific subtype (e.g. type I/II/III for collagens) or null",
+      "sequence_origin": "source organism / engineered / spliced fragment",
       "molecular_weight_kda": "e.g. '~25 kDa' or null",
       "key_features": ["list of distinctive features"],
-      "hydroxylation_required": true/false/null,
+      "post_translational_modifications_required": true/false/null,
       "papers": ["paper filenames that study this protein"]
     }}
   ],
@@ -120,12 +120,15 @@ class DomainKnowledgeSynthesizer:
 
     def __init__(
         self,
+        domain: DomainContext,
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
     ) -> None:
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         self.model = model
         self.cache_dir = cache_dir
+        self.domain = domain
+        self._system = _DOMAIN_SYSTEM.format(field_summary=domain.field_summary)
 
     def synthesize(self, papers_dir: Path) -> dict:
         """Read all PDFs in papers_dir and synthesize domain knowledge."""
@@ -136,6 +139,7 @@ class DomainKnowledgeSynthesizer:
         papers_content = self._read_papers(pdfs)
         prompt = _DOMAIN_PROMPT.format(
             n_papers=len(pdfs),
+            paper_topic=self.domain.paper_topic,
             papers_content=papers_content,
         )
 
@@ -146,7 +150,7 @@ class DomainKnowledgeSynthesizer:
             model=self.model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                system_instruction=_DOMAIN_SYSTEM,
+                system_instruction=self._system,
                 max_output_tokens=16384,
                 temperature=0.1,
                 thinking_config=types.ThinkingConfig(thinking_budget=0),
