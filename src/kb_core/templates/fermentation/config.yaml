@@ -1,0 +1,79 @@
+# Fermentation domain template — adapt to your specific organism / product.
+# Copy this file into data/projects/<your-slug>/config.yaml and edit.
+
+slug: REPLACE_ME
+# A short human-readable name, e.g. "酵母重组蛋白发酵知识库"
+name: REPLACE_ME
+description: |
+  描述这个项目的目标和论文范围。
+
+# Keywords for the PDF chunker — used to flag domain-relevant chunks.
+# Add Chinese + English terms specific to your organism, products, methods.
+keywords:
+  - fermentation
+  - 发酵
+  - expression
+  - 表达
+  - promoter
+  - 启动子
+  - methanol
+  - bioreactor
+  - 生物反应器
+  - induction
+  - 诱导
+  - yield
+  - 产量
+
+domain:
+  expert_field: |
+    Microbial fermentation and recombinant protein expression
+    (replace with your specific host system, e.g. "Pichia pastoris (Komagataella
+    phaffii) bioprocess engineering" or "E. coli industrial fermentation")
+
+  paper_topic: |
+    Recombinant protein expression and fermentation optimization
+
+  field_summary: |
+    Microbial bioprocess engineering, covering strain construction,
+    inducible expression, fermentation control, post-translational
+    modifications, and downstream purification
+
+  qa_role_description: |
+    You are an expert scientific assistant specializing in microbial
+    fermentation and recombinant protein expression.
+
+    Your role is to help researchers design and optimize fermentation
+    experiments to produce recombinant proteins with specific:
+      - structures (correct folding, disulfide bonds)
+      - post-translational modifications
+      - biological activities
+
+  # Per-entity-type hints fed to the entity extractor prompt.
+  # Customize with examples specific to your domain.
+  entity_hints:
+    strains: |
+      Look for: host strain names (e.g. GS115, X-33, BL21, K12) and any
+      genotype markers, methanol utilization phenotype (Mut+/Muts/Mut-),
+      protease deficiencies.
+    promoters: |
+      Look for: promoter names (e.g. AOX1, GAP, lac, tac), expression type
+      (constitutive/inducible), inducer.
+    vectors: |
+      Look for: plasmid / vector names (e.g. pPIC9K, pPICZ, pET28),
+      selection markers, secretion signals, integration sites.
+    media: |
+      Look for: medium designations (e.g. BMGY, BMMY, BSM, FM21, LB, YPD),
+      composition, carbon source, growth phase usage.
+    target_products: |
+      Recombinant proteins or metabolites being produced. List both
+      common names and specific sequence variants.
+
+  # Used by the cross-paper normalizer / registry builder.
+  cross_entity_descriptions:
+    strains: microbial host strains
+    promoters: transcriptional promoters
+    vectors: plasmids and expression vectors
+    target_products: recombinant proteins or metabolites
+    media: fermentation / culture media
+    process_parameters: bioprocess parameters (temperature, pH, DO, etc.)
+    analytical_methods: analytical / characterization methods

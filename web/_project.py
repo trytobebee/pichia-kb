@@ -33,23 +33,79 @@ def list_projects() -> list[str]:
 
 
 def use_project_sidebar() -> None:
-    """Render the sidebar project selector. Call ONCE per page."""
+    """Render the sidebar project selector + new-project affordance. Call ONCE per page."""
     projects = list_projects()
-    if not projects:
-        st.error(f"No projects found under {PROJECTS_ROOT}. Create one first.")
-        st.stop()
-
-    if "project" not in st.session_state:
-        st.session_state.project = projects[0]
 
     with st.sidebar:
-        chosen = st.selectbox(
-            "📁 Project",
-            projects,
-            index=projects.index(st.session_state.project),
+        if projects:
+            if "project" not in st.session_state or st.session_state.project not in projects:
+                st.session_state.project = projects[0]
+            chosen = st.selectbox(
+                "📁 Project",
+                projects,
+                index=projects.index(st.session_state.project),
+            )
+            if chosen != st.session_state.project:
+                st.session_state.project = chosen
+        else:
+            st.warning("No projects yet — create one below.")
+
+        with st.expander("➕ New project", expanded=not projects):
+            _render_new_project_form()
+
+    if not projects:
+        st.info("Create a project in the sidebar to begin.")
+        st.stop()
+
+
+def _render_new_project_form() -> None:
+    """Inline form: pick template + slug + name → fork into data/projects/<slug>/."""
+    from kb_core.cli import _TEMPLATES_ROOT, list_templates
+
+    templates = list_templates()
+    if not templates:
+        st.caption("(no templates installed)")
+        return
+
+    with st.form("new_project_form", clear_on_submit=True):
+        slug = st.text_input(
+            "Slug (lowercase, hyphens)",
+            placeholder="e.g. ecoli-protease",
         )
-        if chosen != st.session_state.project:
-            st.session_state.project = chosen
+        name = st.text_input(
+            "Display name",
+            placeholder="e.g. E. coli protease expression KB",
+        )
+        template = st.selectbox("Template", templates, index=0)
+        submitted = st.form_submit_button("Create", width="stretch")
+
+    if not submitted:
+        return
+    if not slug.strip():
+        st.error("Slug is required")
+        return
+    target = PROJECTS_ROOT / slug.strip()
+    if target.exists():
+        st.error(f"Project '{slug}' already exists")
+        return
+
+    import shutil
+    src = _TEMPLATES_ROOT / template
+    target.mkdir(parents=True)
+    shutil.copy(src / "config.yaml", target / "config.yaml")
+    shutil.copytree(src / "schema", target / "schema")
+    for sub in ("papers", "cache", "figures", "structured"):
+        (target / sub).mkdir()
+
+    cfg_path = target / "config.yaml"
+    cfg_text = cfg_path.read_text(encoding="utf-8")
+    cfg_text = cfg_text.replace("slug: REPLACE_ME", f"slug: {slug}")
+    cfg_text = cfg_text.replace("name: REPLACE_ME", f"name: {name or slug}")
+    cfg_path.write_text(cfg_text, encoding="utf-8")
+
+    st.session_state.project = slug
+    st.success(f"✓ Created project '{slug}' from template '{template}'. Reloading…")
+    st.rerun()
 
 
 def current_project() -> str:

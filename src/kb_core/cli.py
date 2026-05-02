@@ -63,7 +63,122 @@ def _load_schemas(project_dir: Path):
     return load_project_schemas(project_dir)
 
 
+_TEMPLATES_ROOT = Path(__file__).parent / "templates"
+
+
+def list_templates() -> list[str]:
+    if not _TEMPLATES_ROOT.is_dir():
+        return []
+    return sorted(p.name for p in _TEMPLATES_ROOT.iterdir() if p.is_dir())
+
+
 # ── Commands ──────────────────────────────────────────────────────────────────
+
+
+@app.command("new-project")
+def new_project(
+    slug: str = typer.Argument(..., help="Project slug (will become data/projects/<slug>/)"),
+    template: str = typer.Option(
+        "fermentation", "--template", "-t",
+        help="Seed template to fork (kb_core/templates/<template>/)",
+    ),
+    name: str = typer.Option("", help="Human-readable project name (defaults to slug)"),
+):
+    """Create a new project by forking a seed template.
+
+    Copies the template's config.yaml + schema/ into data/projects/<slug>/,
+    sets the slug + name in config.yaml, and creates the empty papers/cache/db/
+    figures/structured/ subdirs.
+    """
+    target = _PROJECTS_ROOT / slug
+    if target.exists():
+        console.print(f"[red]Project '{slug}' already exists at {target}[/red]")
+        raise typer.Exit(1)
+
+    src = _TEMPLATES_ROOT / template
+    if not src.is_dir():
+        available = ", ".join(list_templates()) or "(none)"
+        console.print(
+            f"[red]Template '{template}' not found.[/red] Available: {available}"
+        )
+        raise typer.Exit(1)
+
+    import shutil
+    target.mkdir(parents=True)
+    shutil.copy(src / "config.yaml", target / "config.yaml")
+    shutil.copytree(src / "schema", target / "schema")
+    for sub in ("papers", "cache", "figures", "structured"):
+        (target / sub).mkdir()
+
+    # Replace REPLACE_ME slug + name in config.yaml
+    cfg_path = target / "config.yaml"
+    cfg_text = cfg_path.read_text(encoding="utf-8")
+    cfg_text = cfg_text.replace("slug: REPLACE_ME", f"slug: {slug}")
+    display_name = name or slug
+    cfg_text = cfg_text.replace("name: REPLACE_ME", f"name: {display_name}")
+    cfg_path.write_text(cfg_text, encoding="utf-8")
+
+    console.print(Panel(
+        f"✓ Created [bold]{target}[/bold]\n"
+        f"  Template: {template}\n"
+        f"  Slug: {slug}\n"
+        f"  Name: {display_name}\n\n"
+        f"Next steps:\n"
+        f"  1. Edit [cyan]{cfg_path.relative_to(target.parent.parent.parent)}[/cyan] "
+        f"to customize domain context (expert_field / paper_topic / keywords).\n"
+        f"  2. Drop PDFs into [cyan]{(target / 'papers').relative_to(target.parent.parent.parent)}/[/cyan].\n"
+        f"  3. Run [cyan]kb add <pdf> --project {slug}[/cyan] or use the web UI.",
+        style="green",
+    ))
+
+
+@app.command("list-projects")
+def list_projects_cmd():
+    """List all projects under data/projects/."""
+    if not _PROJECTS_ROOT.is_dir():
+        console.print("[yellow]No projects directory yet.[/yellow]")
+        return
+    rows = []
+    for p in sorted(_PROJECTS_ROOT.iterdir()):
+        if not p.is_dir():
+            continue
+        cfg = p / "config.yaml"
+        if cfg.is_file():
+            try:
+                from .config import load_project_config
+                c = load_project_config(p)
+                rows.append((p.name, c.name))
+            except Exception:
+                rows.append((p.name, "(config error)"))
+        else:
+            rows.append((p.name, "(no config.yaml)"))
+    if not rows:
+        console.print("[yellow]No projects yet. Try [cyan]kb new-project my-domain[/cyan].[/yellow]")
+        return
+    table = Table(title="Projects")
+    table.add_column("Slug", style="cyan")
+    table.add_column("Name")
+    for slug, name in rows:
+        table.add_row(slug, name)
+    console.print(table)
+
+
+@app.command("list-templates")
+def list_templates_cmd():
+    """List the seed templates available for new-project."""
+    templates = list_templates()
+    if not templates:
+        console.print("[yellow]No templates found.[/yellow]")
+        return
+    table = Table(title="Available templates")
+    table.add_column("Name", style="cyan")
+    table.add_column("Path")
+    for t in templates:
+        table.add_row(t, str((_TEMPLATES_ROOT / t).relative_to(Path(__file__).parent.parent.parent)))
+    console.print(table)
+
+
+# ── Commands (continued) ─────────────────────────────────────────────────────
 
 @app.command()
 def ingest(
