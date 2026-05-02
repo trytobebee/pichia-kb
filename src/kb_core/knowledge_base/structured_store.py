@@ -131,12 +131,12 @@ class StructuredStore:
 
     def save_figure_data(self, figures: list) -> int:
         """Save extracted figure data; upsert by (source_file, figure_id). Returns saved count."""
-        from ..schema.figures import FigureData
+        from pydantic import BaseModel
         fig_dir = self._path / self._FIGURES_DIR
         fig_dir.mkdir(exist_ok=True)
         saved = 0
         for fd in figures:
-            if isinstance(fd, FigureData):
+            if isinstance(fd, BaseModel):
                 data = fd.model_dump(exclude_none=True)
             else:
                 data = fd

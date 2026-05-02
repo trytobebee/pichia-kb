@@ -1,0 +1,80 @@
+{
+  "system": "data",
+  "version": 1,
+  "entity_types": [
+    {
+      "name": "FigureData",
+      "extraction_key": "figures",
+      "description": "Structured data extracted from one figure or table.",
+      "fields": [
+        {"name": "source_file", "type": "str", "required": true},
+        {"name": "figure_id", "type": "str", "required": true,
+         "description": "e.g. 'Fig.3-7' or 'Table 2-1'"},
+        {"name": "figure_type", "type": "enum",
+         "enum_values": ["line_curve", "bar_chart", "sds_page", "table",
+                         "scatter", "heatmap", "schematic", "microscopy", "other"],
+         "required": true},
+        {"name": "image_path", "type": "str", "required": true,
+         "description": "Relative path to saved PNG"},
+        {"name": "page_number", "type": "int", "required": true},
+
+        {"name": "caption", "type": "str"},
+        {"name": "surrounding_text", "type": "str"},
+        {"name": "section", "type": "str",
+         "description": "e.g. 'Results', '发酵工艺优化'"},
+
+        {"name": "independent_variables", "type": "list", "item_type": "object",
+         "fields": [
+           {"name": "name", "type": "str", "required": true},
+           {"name": "unit", "type": "str"},
+           {"name": "values", "type": "list", "item_type": "str",
+            "description": "Discrete tested values"},
+           {"name": "range_min", "type": "float"},
+           {"name": "range_max", "type": "float"},
+           {"name": "range_description", "type": "str",
+            "description": "e.g. '0-144h'"}
+         ]},
+
+        {"name": "dependent_variables", "type": "list", "item_type": "object",
+         "fields": [
+           {"name": "name", "type": "str", "required": true},
+           {"name": "unit", "type": "str"},
+           {"name": "values", "type": "list", "item_type": "str"},
+           {"name": "range_min", "type": "float"},
+           {"name": "range_max", "type": "float"},
+           {"name": "range_description", "type": "str"}
+         ]},
+
+        {"name": "fixed_conditions", "type": "dict"},
+
+        {"name": "data_points", "type": "list", "item_type": "object",
+         "description": "One measurement per entry.",
+         "fields": [
+           {"name": "conditions", "type": "dict", "required": true,
+            "description": "e.g. {'copy_number': 10, 'time_h': 144}"},
+           {"name": "values", "type": "dict", "required": true,
+            "description": "e.g. {'yield_gL': 0.70, 'OD600': 85}"},
+           {"name": "note", "type": "str"}
+         ]},
+
+        {"name": "notable_points", "type": "list", "item_type": "object",
+         "fields": [
+           {"name": "condition_description", "type": "str", "required": true,
+            "description": "e.g. 'copy=10, t=144h'"},
+           {"name": "value_description", "type": "str", "required": true,
+            "description": "e.g. '0.70 g/L'"},
+           {"name": "point_type", "type": "str", "required": true,
+            "description": "optimal | inflection | plateau_start | minimum | other"},
+           {"name": "note", "type": "str"}
+         ]},
+
+        {"name": "observed_trend", "type": "str"},
+        {"name": "interpolation_range", "type": "dict",
+         "description": "Safe range for parameter selection"},
+        {"name": "author_conclusion", "type": "str"},
+        {"name": "industrial_note", "type": "str",
+         "description": "Relevance for process parameter selection"}
+      ]
+    }
+  ]
+}

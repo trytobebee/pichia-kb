@@ -625,11 +625,19 @@ def extract_figures(
     """Extract figures from PDFs: save images + structured data (data points, trends, conclusions)."""
     data_dir = _resolve_project(project)
     cfg = _load_cfg(data_dir)
+    schemas = _load_schemas(data_dir)
+    fig_cls = schemas.data_models.get("FigureData")
+    if fig_cls is None:
+        console.print("[red]Project is missing schema/data.json with FigureData.[/red]")
+        raise typer.Exit(1)
     kb = _get_kb(data_dir)
     figures_dir = data_dir / "figures"
     extractor = FigureExtractor(
-            domain=cfg.domain,
-        figures_dir=figures_dir, model=model, cache_dir=data_dir / "cache"
+        domain=cfg.domain,
+        figures_dir=figures_dir,
+        figure_data_cls=fig_cls,
+        model=model,
+        cache_dir=data_dir / "cache",
     )
 
     pdfs: list[Path] = sorted(pdf.glob("*.pdf")) if pdf.is_dir() else [pdf]
@@ -701,10 +709,18 @@ def refine_figures_cmd(
     """
     data_dir = _resolve_project(project)
     cfg = _load_cfg(data_dir)
+    schemas = _load_schemas(data_dir)
+    fig_cls = schemas.data_models.get("FigureData")
+    if fig_cls is None:
+        console.print("[red]Project is missing schema/data.json with FigureData.[/red]")
+        raise typer.Exit(1)
     kb = _get_kb(data_dir)
     extractor = FigureExtractor(
-            domain=cfg.domain,
-        figures_dir=data_dir / "figures", model=model, cache_dir=data_dir / "cache"
+        domain=cfg.domain,
+        figures_dir=data_dir / "figures",
+        figure_data_cls=fig_cls,
+        model=model,
+        cache_dir=data_dir / "cache",
     )
 
     all_papers = kb.structured_store.load_all_experiments(kb.schemas)

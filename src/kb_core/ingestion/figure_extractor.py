@@ -20,7 +20,7 @@ import pdfplumber
 from google import genai
 from google.genai import types
 
-from ..schema.figures import FigureData
+from pydantic import BaseModel
 from .pdf_text import read_pdf_text
 
 
@@ -143,6 +143,7 @@ class FigureExtractor:
         self,
         figures_dir: Path,
         domain,  # DomainContext, kept untyped to avoid circular import
+        figure_data_cls: type[BaseModel],
         model: str = "gemini-2.5-flash",
         dpi: int = 150,
         cache_dir: Path | None = None,
@@ -154,11 +155,12 @@ class FigureExtractor:
         self.cache_dir = cache_dir
         self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         self.domain = domain
+        self.figure_data_cls = figure_data_cls
         self._system = _FIGURE_SYSTEM.format(field_summary=domain.field_summary)
 
     # ── public ───────────────────────────────────────────────────────────────
 
-    def extract_from_pdf(self, pdf_path: Path) -> list[FigureData]:
+    def extract_from_pdf(self, pdf_path: Path) -> list[BaseModel]:
         """Extract all figures from a PDF and return structured FigureData list."""
         import fitz  # pymupdf
 
@@ -166,7 +168,7 @@ class FigureExtractor:
         full_text = self._extract_full_text(pdf_path)
         captions = _find_captions(full_text)
 
-        results: list[FigureData] = []
+        results: list[BaseModel] = []
         doc = fitz.open(str(pdf_path))
 
         fig_index = 0
@@ -266,7 +268,7 @@ class FigureExtractor:
         expected_x_categories: list[str] | None = None,
         expected_y_metrics: list[str] | None = None,
         experiment_summary: str | None = None,
-    ) -> FigureData:
+    ) -> BaseModel:
         """Re-extract a figure with prior knowledge of expected axis categories.
 
         Useful for bar charts where adjacent x-axis labels were merged in the
@@ -297,7 +299,7 @@ class FigureExtractor:
         expected_x_categories: list[str] | None = None,
         expected_y_metrics: list[str] | None = None,
         experiment_summary: str | None = None,
-    ) -> FigureData:
+    ) -> BaseModel:
         prompt = _FIGURE_PROMPT.format(
             source_file=source_file,
             page_number=page_number,
@@ -398,7 +400,7 @@ class FigureExtractor:
         if ft not in _FIG_TYPES:
             ft = "other"
 
-        return FigureData(
+        return self.figure_data_cls(
             source_file=source_file,
             figure_id=figure_id,
             figure_type=ft,
