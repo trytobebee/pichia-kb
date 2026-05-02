@@ -27,6 +27,7 @@ class FieldSpec(BaseModel):
     #   - scalar:  "str" | "int" | "float" | "bool"
     #   - container: "list" | "dict"  (use item_type for list element type)
     #   - "enum"   (use enum_values to enumerate allowed strings)
+    #   - "object" (use fields to define nested fields inline)
     #   - "ref:<system>.<EntityType>"  — reference by canonical name (stored as str)
     type: str
     required: bool = False
@@ -40,7 +41,16 @@ class FieldSpec(BaseModel):
     )
     item_type: str | None = Field(
         default=None,
-        description="When type='list'; element type. Recursively one of the type strings.",
+        description=(
+            "When type='list'; element type. Either a scalar/enum/object "
+            "type string, or 'object' (then use `fields` for the element shape)."
+        ),
+    )
+    fields: list["FieldSpec"] | None = Field(
+        default=None,
+        description=(
+            "When type='object' (or list of objects); the nested field specs."
+        ),
     )
 
     def model_post_init(self, _ctx: Any) -> None:
@@ -51,6 +61,14 @@ class FieldSpec(BaseModel):
         if self.type == "list" and self.item_type is None:
             # Default to list[str] when unspecified; loose but pragmatic
             self.item_type = "str"
+        if self.type == "object" and not self.fields:
+            raise ValueError(
+                f"FieldSpec '{self.name}' has type='object' but no nested fields"
+            )
+        if self.type == "list" and self.item_type == "object" and not self.fields:
+            raise ValueError(
+                f"FieldSpec '{self.name}' is list[object] but no nested fields"
+            )
 
 
 class EntityTypeDefinition(BaseModel):

@@ -172,3 +172,58 @@ def test_load_project_schemas_missing_dir_returns_empty():
     ps = load_project_schemas(Path("/nonexistent"))
     assert ps.knowledge_spec is None
     assert ps.knowledge_models == {}
+
+
+def test_inline_object_field():
+    et = EntityTypeDefinition(
+        name="ExperimentRun",
+        fields=[
+            FieldSpec(name="experiment_id", type="str", required=True),
+            FieldSpec(
+                name="setup",
+                type="object",
+                fields=[
+                    FieldSpec(name="scale", type="str"),
+                    FieldSpec(name="medium", type="str"),
+                ],
+            ),
+        ],
+    )
+    Cls = build_class(et)
+    obj = Cls(experiment_id="E1", setup={"scale": "5L", "medium": "BSM"})
+    assert obj.setup.scale == "5L"
+    assert obj.setup.medium == "BSM"
+
+
+def test_list_of_objects():
+    et = EntityTypeDefinition(
+        name="ExperimentRun",
+        fields=[
+            FieldSpec(name="experiment_id", type="str", required=True),
+            FieldSpec(
+                name="phases",
+                type="list",
+                item_type="object",
+                fields=[
+                    FieldSpec(name="phase_name", type="str", required=True),
+                    FieldSpec(name="duration_hours", type="str"),
+                ],
+            ),
+        ],
+    )
+    Cls = build_class(et)
+    obj = Cls(
+        experiment_id="E1",
+        phases=[
+            {"phase_name": "glycerol_batch", "duration_hours": "24h"},
+            {"phase_name": "methanol_induction"},
+        ],
+    )
+    assert len(obj.phases) == 2
+    assert obj.phases[0].phase_name == "glycerol_batch"
+    assert obj.phases[1].duration_hours is None
+
+
+def test_object_field_missing_fields_raises():
+    with pytest.raises(ValueError, match="no nested fields"):
+        FieldSpec(name="setup", type="object")

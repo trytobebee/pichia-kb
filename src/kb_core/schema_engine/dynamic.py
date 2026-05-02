@@ -36,10 +36,15 @@ def _python_type_for(field: FieldSpec) -> Any:
         if not field.enum_values:
             return str
         return Literal[tuple(field.enum_values)]  # type: ignore[valid-type]
+    if t == "object":
+        return _build_inline_object(field.name, field.fields or [])
     if t == "list":
-        # Recursively map the item type — but item_type is a string with
-        # the same vocabulary; build a fake FieldSpec to recurse cleanly.
-        item_field = FieldSpec(name=field.name + "_item", type=field.item_type or "str")
+        item_t = field.item_type or "str"
+        if item_t == "object":
+            element = _build_inline_object(field.name + "_item", field.fields or [])
+            return list[element]  # type: ignore[valid-type]
+        # Recursively map a scalar/enum item via a synthetic FieldSpec
+        item_field = FieldSpec(name=field.name + "_item", type=item_t)
         item_py = _python_type_for(item_field)
         return list[item_py]  # type: ignore[valid-type]
     if t.startswith("ref:"):
@@ -50,6 +55,31 @@ def _python_type_for(field: FieldSpec) -> Any:
 
     # Unknown type → fall back to Any so we don't crash on partial schemas.
     return Any
+
+
+def _build_inline_object(name: str, sub_fields: list[FieldSpec]) -> type[BaseModel]:
+    """Build a Pydantic class for an inline object type (no inheritance)."""
+    field_defs: dict[str, tuple[Any, Any]] = {}
+    for f in sub_fields:
+        py_type = _python_type_for(f)
+        if f.required:
+            field_info = Field(default=..., description=f.description)
+            field_defs[f.name] = (py_type, field_info)
+            continue
+        if f.type == "list" and f.default is None:
+            field_info = Field(default_factory=list, description=f.description)
+        elif f.type == "dict" and f.default is None:
+            field_info = Field(default_factory=dict, description=f.description)
+        elif f.type == "object" and f.default is None:
+            field_info = Field(default=None, description=f.description)
+            py_type = Optional[py_type]
+        else:
+            py_type = Optional[py_type]
+            field_info = Field(default=f.default, description=f.description)
+        field_defs[f.name] = (py_type, field_info)
+
+    cls_name = "_" + "".join(p.capitalize() for p in name.replace("[", "_").replace("]", "_").split("_"))
+    return create_model(cls_name, __base__=BaseModel, **field_defs)  # type: ignore[call-overload]
 
 
 def _resolve_bases(inherits: list[str]) -> tuple[type[BaseModel], ...]:
