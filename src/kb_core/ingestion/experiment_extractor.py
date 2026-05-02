@@ -13,19 +13,15 @@ discrete experiments and tie them to figures.
 
 from __future__ import annotations
 
-import json
-import os
 import sys
 import textwrap
 import time
 from pathlib import Path
 
-from google import genai
-from google.genai import types
-
 from pydantic import BaseModel
 
 from ..config import DomainContext
+from ..llm import get_llm
 from ..schema_engine import PaperExperiments
 from .pdf_text import read_pdf_text
 
@@ -177,10 +173,7 @@ class ExperimentExtractor:
         max_text_chars: int = 200_000,
         request_timeout_ms: int = 600_000,
     ) -> None:
-        self.client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=request_timeout_ms),
-        )
+        self.llm = get_llm(model)
         self.model = model
         self.cache_dir = cache_dir
         self.max_text_chars = max_text_chars
@@ -211,18 +204,12 @@ class ExperimentExtractor:
         )
 
         last_err: Exception | None = None
-        response = None
+        data = None
         for attempt in range(1, 5):  # up to 4 attempts with backoff
             try:
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=self._system,
-                        max_output_tokens=32768,
-                        temperature=0.1,
-                        response_mime_type="application/json",
-                    ),
+                data = self.llm.chat_json(
+                    prompt, system=self._system,
+                    temperature=0.1, max_tokens=32768,
                 )
                 break
             except Exception as e:
@@ -249,26 +236,10 @@ class ExperimentExtractor:
                 )
                 time.sleep(wait)
 
-        if response is None:
+        if data is None:
             return PaperExperiments(
                 source_file=pdf_path.name,
                 extraction_notes=f"API failure: {last_err}",
-            )
-
-        raw = (response.text or "").strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as e:
-            print(
-                f"  [warn] JSON parse failed for {pdf_path.name}: {e}",
-                file=sys.stderr,
-            )
-            print(f"         raw[:400]={raw[:400]!r}", file=sys.stderr)
-            return PaperExperiments(
-                source_file=pdf_path.name,
-                extraction_notes=f"JSON parse failure: {e}",
             )
 
         return self._build_paper_experiments(pdf_path.name, data)

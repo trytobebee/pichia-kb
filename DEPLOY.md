@@ -196,6 +196,24 @@ start.sh does this).
 **Port 8501 already in use** — another streamlit is running. Either reuse
 that one or kill it: `pkill -f "streamlit run"`.
 
-**Slow LLM responses** — Aliyun mainland servers may need extra config to
-reach Google APIs. Test with `curl https://generativelanguage.googleapis.com`.
-If blocked, you'll need a regional egress proxy.
+**Gemini API unreachable from Aliyun mainland** — `curl
+https://generativelanguage.googleapis.com` will hang or fail. The fix is
+NOT a proxy; it's switching providers. The framework supports DeepSeek
+out of the box (OpenAI-compatible API, accessible from mainland China):
+
+1. Get a DeepSeek API key from <https://platform.deepseek.com/>
+2. Add it to your server's `.env`:
+   ```
+   DEEPSEEK_API_KEY=sk-...
+   ```
+3. Use a DeepSeek model id in CLI calls (or set as default in your
+   workflow scripts):
+   ```bash
+   kb ingest paper.pdf --project foo --model deepseek-chat
+   kb ask "..." --project foo --model deepseek-chat
+   kb review --project foo --model deepseek-chat
+   ```
+4. Limitations: `kb extract-figures` (vision) and the 🛠️ Schema Curator
+   web page still need Gemini. If you must keep both on the same server
+   without Google access, run figure extraction locally and rsync the
+   output `data/projects/<slug>/structured/figures/` up.

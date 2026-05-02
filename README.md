@@ -212,9 +212,22 @@ kb ask "..." --project ecoli-protease
 | typer + rich | — | CLI |
 | streamlit | ≥1.56 | Web UI |
 
-**API 依赖:** Gemini(`.env` 里 `GEMINI_API_KEY`)。
-- ingest / synthesize / curator / QA 默认 `gemini-2.5-flash`
-- review / extract-experiments 默认 `gemini-2.5-pro`(更高质量)
+**API 依赖:** 至少配一个 LLM provider 的 key。多 provider 共存,model 字符串决定走哪家:
+
+| Provider | Key (.env) | Model 前缀 | 适合场景 |
+|---|---|---|---|
+| Google Gemini | `GEMINI_API_KEY` | `gemini-*` | 默认;图表抽取必须用(vision);海外网络 |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek-*` | OpenAI-兼容;**国内服务器友好**(Gemini 出海受限时) |
+| OpenAI | `OPENAI_API_KEY` | `gpt-*` / `o1-*` / `o3-*` | OpenAI 直连 |
+
+CLI 用 `--model deepseek-chat` 切到 DeepSeek 例如:
+```
+kb ask "..." --project pichia-collagen --model deepseek-chat
+```
+
+**仍只支持 Gemini 的两个能力**:
+- `kb extract-figures`(vision API,DeepSeek 没有 vision 模型)
+- 🛠️ Schema Curator 页(用 Gemini 的 function-calling 协议;OpenAI-compat 的 tool calling 后续可加)
 
 **运行环境:** Python ≥ 3.12,包管理用 [uv](https://docs.astral.sh/uv/)。
 

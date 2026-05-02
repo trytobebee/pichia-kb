@@ -10,15 +10,11 @@ The per-paper JSONs are treated as read-only; the registry is a derived view.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import textwrap
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
-
-from google import genai
-from google.genai import types
 
 from .normalizer import _norm_key, _merge_group, _union, _best_confidence, _merge_notes
 
@@ -109,8 +105,10 @@ Grouping rules:
 Names:
 {names}
 
-Return a JSON array:
-[{{"canonical": "most standard/informative name", "members": ["name1", "name2"]}}]
+Return a JSON object with a single key "clusters":
+{{"clusters": [
+  {{"canonical": "most standard/informative name", "members": ["name1", "name2"]}}
+]}}
 Include ALL names from the input. Return ONLY valid JSON.
 """).strip()
 
@@ -119,8 +117,7 @@ def _llm_cluster(
     entity_type: str,
     norm_groups: dict[str, list[dict]],
     key_field: str,
-    client: genai.Client,
-    model: str,
+    llm,  # LLMBackend (avoid circular import)
     expert_field: str,
     entity_desc: str,
 ) -> dict[str, list[str]]:
@@ -154,27 +151,18 @@ def _llm_cluster(
     )
 
     try:
-        resp = client.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=_SYN_SYSTEM_TEMPLATE.format(expert_field=expert_field),
-                max_output_tokens=8192,
-                temperature=0.1,
-            ),
+        data = llm.chat_json(
+            prompt,
+            system=_SYN_SYSTEM_TEMPLATE.format(expert_field=expert_field),
+            temperature=0.1, max_tokens=8192,
         )
     except Exception as exc:
         print(f"  [warn] LLM call failed for {entity_type}: {exc}", file=sys.stderr)
         return result
 
-    raw_text = (resp.text or "").strip()
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("\n", 1)[1].rsplit("```", 1)[0]
-
-    try:
-        clusters = json.loads(raw_text)
-    except json.JSONDecodeError as exc:
-        print(f"  [warn] LLM JSON parse failed for {entity_type}: {exc}", file=sys.stderr)
+    clusters = data.get("clusters", [])
+    if not isinstance(clusters, list):
+        print(f"  [warn] LLM cluster response missing 'clusters' array for {entity_type}", file=sys.stderr)
         return result
 
     # Map display names back to norm_keys (only cross-paper candidates)
@@ -242,7 +230,8 @@ def build_registry(
     framework-generic) override the human-readable descriptions used in
     the prompt.
     """
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    from ..llm import get_llm
+    llm = get_llm(model)
     descs = {**_DEFAULT_ENTITY_TYPE_DESC, **(entity_descriptions or {})}
 
     print("Collecting entities from per-paper JSONs...")
@@ -266,7 +255,7 @@ def build_registry(
         if etype in _LLM_CLUSTER_TYPES and len(norm_groups) > 1:
             print(f" → LLM clustering...", end="", flush=True)
             cluster_map = _llm_cluster(
-                etype, norm_groups, key_field, client, model,
+                etype, norm_groups, key_field, llm,
                 expert_field=expert_field,
                 entity_desc=descs.get(etype, etype),
             )

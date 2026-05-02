@@ -9,16 +9,14 @@ returned entity through the dynamically-generated Pydantic class.
 from __future__ import annotations
 
 import json
-import os
 import sys
 import textwrap
 from pathlib import Path
 
-from google import genai
-from google.genai import types
 from pydantic import BaseModel
 
 from ..config import DomainContext
+from ..llm import get_llm
 from ..schema_engine import KnowledgeChunk
 from ..schema_engine import ExtractionResult, FieldSpec, SchemaFile
 from .pdf_processor import PDFProcessor
@@ -101,13 +99,8 @@ class KnowledgeExtractor:
         request_timeout_ms: int = 120_000,
         keywords: list[str] | None = None,
     ) -> None:
-        # Without an explicit timeout the SDK can hang indefinitely on a
-        # stalled connection — we lost a 70-min ingest run to this on
-        # 2026-04-29. 120s is generous for a single chunk extraction.
-        self.client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=request_timeout_ms),
-        )
+        # request_timeout_ms is forwarded to providers that support it.
+        self.llm = get_llm(model)
         self.model = model
         self.domain = domain
         self.knowledge_spec = knowledge_spec
@@ -157,34 +150,23 @@ class KnowledgeExtractor:
             text=chunk.content,
         )
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=self._system,
-                    max_output_tokens=8192,
-                    temperature=0.1,
-                ),
+            return self.llm.chat_json(
+                prompt, system=self._system,
+                temperature=0.1, max_tokens=8192,
             )
-        except Exception as e:
-            print(
-                f"  [warn] API call failed for chunk={chunk.chunk_id}: "
-                f"{type(e).__name__}: {e}",
-                file=sys.stderr,
-            )
-            return None
-        raw = (response.text or "").strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-        try:
-            return json.loads(raw)
         except json.JSONDecodeError as e:
             print(
                 f"  [warn] JSON parse failed for chunk={chunk.chunk_id} "
                 f"section={chunk.section!r}: {e}",
                 file=sys.stderr,
             )
-            print(f"         raw[:300]={raw[:300]!r}", file=sys.stderr)
+            return None
+        except Exception as e:
+            print(
+                f"  [warn] API call failed for chunk={chunk.chunk_id}: "
+                f"{type(e).__name__}: {e}",
+                file=sys.stderr,
+            )
             return None
 
     def _merge(

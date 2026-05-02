@@ -9,15 +9,11 @@ evidence-weighted recommendations.
 from __future__ import annotations
 
 import json
-import os
 import textwrap
 from datetime import date
-from pathlib import Path
-
-from google import genai
-from google.genai import types
 
 from ..config import DomainContext
+from ..llm import get_llm
 from ..schema_engine import DialecticalReview
 
 
@@ -119,7 +115,7 @@ class DialecticalReviewer:
     """Performs cross-paper dialectical synthesis of process knowledge."""
 
     def __init__(self, domain: DomainContext, model: str = "gemini-2.5-pro") -> None:
-        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.llm = get_llm(model)
         self.model = model
         self.domain = domain
         self._system = _REVIEW_SYSTEM.format(field_summary=domain.field_summary)
@@ -146,18 +142,8 @@ class DialecticalReviewer:
         )
 
         print(f"  Sending {len(knowledge_dump):,} chars to {self.model} for dialectical review...")
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=16384,
-                temperature=0.15,
-            ),
+        data = self.llm.chat_json(
+            prompt, system=self._system,
+            temperature=0.15, max_tokens=16384,
         )
-        raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-
-        data = json.loads(raw)
         return DialecticalReview(**data)

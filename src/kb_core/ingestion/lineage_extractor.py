@@ -12,19 +12,15 @@ place.
 
 from __future__ import annotations
 
-import json
-import os
 import sys
 import textwrap
 import time
 from typing import Any
 
-from google import genai
-from google.genai import types
-
 from pydantic import BaseModel
 
 from ..config import DomainContext
+from ..llm import get_llm
 from ..schema_engine import PaperExperiments
 
 
@@ -139,10 +135,7 @@ class LineageExtractor:
         model: str = "gemini-2.5-pro",
         request_timeout_ms: int = 600_000,
     ) -> None:
-        self.client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=request_timeout_ms),
-        )
+        self.llm = get_llm(model)
         self.model = model
         self.domain = domain
         self.lineage_edge_cls = lineage_edge_cls
@@ -161,19 +154,13 @@ class LineageExtractor:
             experiments_block=block,
         )
 
-        response = None
+        data: dict[str, Any] | None = None
         last_err: Exception | None = None
         for attempt in range(1, 5):
             try:
-                response = self.client.models.generate_content(
-                    model=self.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=self._system,
-                        max_output_tokens=8192,
-                        temperature=0.1,
-                        response_mime_type="application/json",
-                    ),
+                data = self.llm.chat_json(
+                    prompt, system=self._system,
+                    temperature=0.1, max_tokens=8192,
                 )
                 break
             except Exception as e:
@@ -196,21 +183,8 @@ class LineageExtractor:
                 )
                 time.sleep(wait)
 
-        if response is None:
+        if data is None:
             print(f"  [warn] lineage extraction got no response: {last_err}", file=sys.stderr)
-            return []
-
-        raw = (response.text or "").strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-        try:
-            data: dict[str, Any] = json.loads(raw)
-        except json.JSONDecodeError as e:
-            print(
-                f"  [warn] lineage JSON parse failed for {paper_exps.source_file}: {e}",
-                file=sys.stderr,
-            )
-            print(f"         raw[:400]={raw[:400]!r}", file=sys.stderr)
             return []
 
         edges_raw = data.get("edges") or []

@@ -1,4 +1,7 @@
-"""RAG-powered Q&A assistant, using Gemini.
+"""RAG-powered Q&A assistant.
+
+Uses the LLM abstraction (kb_core.llm), so model id picks the provider:
+'gemini-*' / 'deepseek-*' / 'gpt-*' / etc.
 
 Domain expertise is supplied per-project via DomainContext. The
 guidelines below are framework-generic; the role description
@@ -7,14 +10,11 @@ guidelines below are framework-generic; the role description
 
 from __future__ import annotations
 
-import os
 import textwrap
-
-from google import genai
-from google.genai import types
 
 from ..config import DomainContext
 from ..knowledge_base import KnowledgeBase
+from ..llm import LLMBackend, get_llm
 
 
 _SYSTEM_PROMPT_TEMPLATE = textwrap.dedent("""
@@ -68,9 +68,9 @@ class Assistant:
         self.domain = domain
         self.model = model
         self.n_chunks = n_chunks
-        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        # Gemini uses "model" role (not "assistant") and plain text parts
-        self._history: list[types.Content] = []
+        self.llm: LLMBackend = get_llm(model)
+        # OpenAI-style {role, content} message history.
+        self._history: list[dict] = []
         self._system = _SYSTEM_PROMPT_TEMPLATE.format(
             role_description=domain.qa_role_description.strip()
             or f"You are an expert in {domain.expert_field}."
@@ -84,16 +84,25 @@ class Assistant:
             if context
             else _NO_CONTEXT_TEMPLATE.format(question=question)
         )
+        self._history.append({"role": "user", "content": user_text})
 
-        self._history.append(
-            types.Content(role="user", parts=[types.Part(text=user_text)])
-        )
+        if stream:
+            collected: list[str] = []
+            for chunk in self.llm.stream_chat(
+                self._history, system=self._system,
+                temperature=0.2, max_tokens=4096,
+            ):
+                print(chunk, end="", flush=True)
+                collected.append(chunk)
+            print()
+            answer = "".join(collected)
+        else:
+            answer = self.llm.chat(
+                self._history, system=self._system,
+                temperature=0.2, max_tokens=4096,
+            )
 
-        answer = self._stream_response() if stream else self._complete_response()
-
-        self._history.append(
-            types.Content(role="model", parts=[types.Part(text=answer)])
-        )
+        self._history.append({"role": "assistant", "content": answer})
         return answer
 
     def stream_chunks(self, question: str):
@@ -104,57 +113,15 @@ class Assistant:
             if context
             else _NO_CONTEXT_TEMPLATE.format(question=question)
         )
-        self._history.append(
-            types.Content(role="user", parts=[types.Part(text=user_text)])
-        )
-        full: list[str] = []
-        for chunk in self.client.models.generate_content_stream(
-            model=self.model,
-            contents=self._history,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=4096,
-                temperature=0.2,
-            ),
+        self._history.append({"role": "user", "content": user_text})
+        collected: list[str] = []
+        for chunk in self.llm.stream_chat(
+            self._history, system=self._system,
+            temperature=0.2, max_tokens=4096,
         ):
-            if chunk.text:
-                full.append(chunk.text)
-                yield chunk.text
-        answer = "".join(full)
-        self._history.append(
-            types.Content(role="model", parts=[types.Part(text=answer)])
-        )
+            collected.append(chunk)
+            yield chunk
+        self._history.append({"role": "assistant", "content": "".join(collected)})
 
     def reset_history(self) -> None:
         self._history.clear()
-
-    # ── private ──────────────────────────────────────────────────────────────
-
-    def _stream_response(self) -> str:
-        full: list[str] = []
-        for chunk in self.client.models.generate_content_stream(
-            model=self.model,
-            contents=self._history,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=4096,
-                temperature=0.2,
-            ),
-        ):
-            if chunk.text:
-                print(chunk.text, end="", flush=True)
-                full.append(chunk.text)
-        print()
-        return "".join(full)
-
-    def _complete_response(self) -> str:
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=self._history,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=4096,
-                temperature=0.2,
-            ),
-        )
-        return response.text

@@ -8,17 +8,13 @@ technical challenges, innovations, and field maturity assessment.
 
 from __future__ import annotations
 
-import json
-import os
 import sys
 import textwrap
 from datetime import date
 from pathlib import Path
 
-from google import genai
-from google.genai import types
-
 from ..config import DomainContext
+from ..llm import get_llm
 from .pdf_text import read_pdf_text
 
 
@@ -124,7 +120,7 @@ class DomainKnowledgeSynthesizer:
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
     ) -> None:
-        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.llm = get_llm(model)
         self.model = model
         self.cache_dir = cache_dir
         self.domain = domain
@@ -146,24 +142,13 @@ class DomainKnowledgeSynthesizer:
         print(f"  Synthesizing domain knowledge from {len(pdfs)} papers "
               f"({len(papers_content):,} chars)...")
 
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=16384,
-                temperature=0.1,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
         try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as e:
-            print(f"  [warn] JSON parse error: {e}", file=sys.stderr)
-            print(f"  [warn] raw ({len(raw)} chars): {raw[:300]}", file=sys.stderr)
+            data = self.llm.chat_json(
+                prompt, system=self._system,
+                temperature=0.1, max_tokens=16384,
+            )
+        except Exception as e:
+            print(f"  [warn] domain synthesis failed: {type(e).__name__}: {e}", file=sys.stderr)
             data = {}
 
         data["synthesis_date"] = str(date.today())

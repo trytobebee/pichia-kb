@@ -9,14 +9,11 @@ and asks Gemini to distil control principles, protocols, and quality factors
 from __future__ import annotations
 
 import json
-import os
 import textwrap
 from pathlib import Path
 
-from google import genai
-from google.genai import types
-
 from ..config import DomainContext
+from ..llm import get_llm
 from .pdf_text import read_pdf_text
 
 
@@ -120,7 +117,7 @@ class ProcessKnowledgeSynthesizer:
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
     ) -> None:
-        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.llm = get_llm(model)
         self.model = model
         self.cache_dir = cache_dir
         self.domain = domain
@@ -133,25 +130,14 @@ class ProcessKnowledgeSynthesizer:
             source_file=source_file,
             content=content,
         )
-        response = self.client.models.generate_content(
-            model=self.model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=self._system,
-                max_output_tokens=16384,
-                temperature=0.1,
-                thinking_config=types.ThinkingConfig(thinking_budget=0),
-            ),
-        )
-        raw = response.text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
         try:
-            return json.loads(raw)
+            return self.llm.chat_json(
+                prompt, system=self._system,
+                temperature=0.1, max_tokens=16384,
+            )
         except json.JSONDecodeError as e:
             import sys
             print(f"[synthesizer] JSON parse error for {source_file}: {e}", file=sys.stderr)
-            print(f"[synthesizer] Raw response ({len(raw)} chars): {raw[:200]}...", file=sys.stderr)
             return {}
 
     def synthesize_from_pdf(self, pdf_path: Path) -> dict:
