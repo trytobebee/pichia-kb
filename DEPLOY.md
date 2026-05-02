@@ -1,0 +1,201 @@
+# Deploying kb-core to a remote server
+
+Targets a single-tenant Linux box (Ubuntu 22.04+ assumed; works on CentOS too).
+For a personal-use deployment the recommended access pattern is **SSH tunnel** —
+the web UI binds to `127.0.0.1` on the server and you tunnel to it from your
+laptop. Streamlit has no built-in auth; do **not** expose port 8501 directly to
+the public internet without putting nginx + basic-auth (or similar) in front.
+
+---
+
+## 0. Prerequisites on the server
+
+```bash
+ssh root@your-server         # or your sudo user
+# Install uv (Python package manager) if not already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env  # or restart shell
+uv --version                 # confirm
+```
+
+`uv` will manage the Python 3.12 install — no system python required.
+
+---
+
+## 1. Clone repo + install deps
+
+```bash
+cd ~                         # or wherever you want it
+git clone https://github.com/trytobebee/pichia-kb.git
+cd pichia-kb
+uv sync                      # creates .venv, installs everything
+```
+
+---
+
+## 2. Configure secrets
+
+```bash
+cp .env.example .env
+nano .env                    # set GEMINI_API_KEY=...
+chmod 600 .env               # owner-only read
+```
+
+---
+
+## 3. Transfer project data
+
+The `data/projects/<slug>/` directory contains your PDFs + extracted JSONs +
+ChromaDB. It is gitignored, so you have to copy it from your laptop.
+
+```bash
+# From your LOCAL machine (not the server):
+rsync -avz --progress \
+    data/projects/ \
+    root@your-server:/root/pichia-kb/data/projects/
+```
+
+For pichia-collagen the payload is roughly 95 MB (papers 32M + figures 44M +
+db 15M + structured 4M).
+
+Verify on the server:
+
+```bash
+~/pichia-kb/.venv/bin/kb list-projects --help    # confirms install ok
+~/pichia-kb/.venv/bin/kb status --project pichia-collagen
+```
+
+---
+
+## 4. Run it
+
+### Option A: ad-hoc with tmux (quickest)
+
+```bash
+cd ~/pichia-kb
+tmux new -s kb               # new tmux session
+./scripts/start.sh           # launches streamlit on :8501
+# Ctrl-B then D to detach. The server keeps running.
+# tmux attach -t kb          # to come back later
+```
+
+### Option B: systemd (auto-restart, starts on boot)
+
+```bash
+# Edit the unit template if your install path isn't /root/pichia-kb
+sudo cp ~/pichia-kb/scripts/kb-core.service /etc/systemd/system/kb-core.service
+sudo nano /etc/systemd/system/kb-core.service   # confirm User / WorkingDirectory / EnvironmentFile
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now kb-core
+sudo systemctl status kb-core               # should be "active (running)"
+sudo journalctl -u kb-core -f               # live logs
+```
+
+To upgrade later:
+```bash
+cd ~/pichia-kb && git pull && uv sync && sudo systemctl restart kb-core
+```
+
+---
+
+## 5. Access the web UI from your laptop (SSH tunnel)
+
+```bash
+# On your laptop:
+ssh -L 8501:localhost:8501 root@your-server
+
+# Keep that SSH session open. In your browser:
+#   http://localhost:8501
+# Traffic is encrypted by SSH; nothing exposed publicly.
+```
+
+Tip: add a Host alias to `~/.ssh/config` so you can just type `ssh kb-server`
+and forget the tunnel flag:
+
+```
+Host kb-server
+    HostName your-server-ip
+    User root
+    LocalForward 8501 localhost:8501
+```
+
+---
+
+## 6. (Optional) Public access with nginx + basic auth
+
+Only if you have non-technical collaborators who can't use SSH. Skip if you
+don't need it.
+
+```bash
+sudo apt install nginx apache2-utils
+sudo htpasswd -c /etc/nginx/.htpasswd alice          # set username/password
+# create /etc/nginx/sites-available/kb-core
+```
+
+```nginx
+server {
+    listen 80;
+    server_name kb.your-domain.com;
+
+    auth_basic "kb-core";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://127.0.0.1:8501;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 600s;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/kb-core /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+# Open port 80 (and 443 if using TLS) in your Aliyun security group.
+# Strongly recommend adding TLS via Let's Encrypt: `sudo certbot --nginx -d kb.your-domain.com`
+```
+
+The streamlit unit still binds to 127.0.0.1 — only nginx talks to the outside.
+
+---
+
+## 7. Backups
+
+The local data is the asset, not the code. At minimum periodically rsync
+`data/projects/` back to your laptop:
+
+```bash
+# From your LOCAL machine
+rsync -avz --progress \
+    root@your-server:/root/pichia-kb/data/projects/ \
+    backups/projects-$(date +%F)/
+```
+
+ChromaDB is a normal SQLite-backed file store — copying the directory while
+the service is stopped (or with `chromadb`'s built-in snapshot) is safe.
+
+---
+
+## Common issues
+
+**`ModuleNotFoundError: No module named 'kb_core'`** — you're running outside
+the venv. Use `./scripts/start.sh` or `source .venv/bin/activate` first.
+
+**Streamlit page loads but is empty / project picker missing** — your `data/projects/`
+didn't sync over. Check `ls data/projects/` on the server.
+
+**`KeyError: 'GEMINI_API_KEY'`** — `.env` not loaded. systemd uses
+`EnvironmentFile=`; manual launch needs `set -a; . .env; set +a` (the
+start.sh does this).
+
+**Port 8501 already in use** — another streamlit is running. Either reuse
+that one or kill it: `pkill -f "streamlit run"`.
+
+**Slow LLM responses** — Aliyun mainland servers may need extra config to
+reach Google APIs. Test with `curl https://generativelanguage.googleapis.com`.
+If blocked, you'll need a regional egress proxy.

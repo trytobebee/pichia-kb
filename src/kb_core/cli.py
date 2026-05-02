@@ -1301,15 +1301,24 @@ def _print_summary(kb: KnowledgeBase) -> None:
 
 @app.command()
 def serve(
-    port: int = typer.Option(8502, help="Port to run on"),
+    port: int = typer.Option(8501, help="Port to run on"),
+    public: bool = typer.Option(
+        False, "--public",
+        help="Bind to 0.0.0.0 (accessible from outside the host). "
+             "Default localhost-only — use SSH tunnel for safe remote access.",
+    ),
 ):
     """Launch the web interface (Streamlit)."""
     import subprocess
     web_dir = Path(__file__).parent.parent.parent / "web" / "Home.py"
-    subprocess.run(
-        ["streamlit", "run", str(web_dir), "--server.port", str(port)],
-        check=True,
-    )
+    address = "0.0.0.0" if public else "127.0.0.1"
+    cmd = [
+        "streamlit", "run", str(web_dir),
+        "--server.port", str(port),
+        "--server.address", address,
+        "--server.headless", "true",
+    ]
+    subprocess.run(cmd, check=True)
 
 
 def main() -> None:
