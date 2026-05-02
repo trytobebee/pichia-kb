@@ -7,20 +7,29 @@ JSON schema definition and pick up these fields automatically.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EntityProvenance(BaseModel):
     """Provenance fields for traceability of LLM-extracted entities."""
 
-    sources: list[str] = Field(default_factory=list, description="Source filenames")
-    chunk_ids: list[str] = Field(default_factory=list, description="Chunk IDs the entity was found in")
-    raw_mention: str | None = Field(default=None, description="Verbatim mention from source")
-    extraction_confidence: float | None = Field(
-        default=None, description="LLM-reported confidence 0..1"
-    )
+    # LLMs frequently emit numeric values for fields modeled as strings
+    # (``temperature_celsius: 25`` instead of ``"25"``). Coerce silently
+    # rather than reject — losing the fact is worse than losing the type.
+    model_config = ConfigDict(coerce_numbers_to_str=True, extra="allow")
 
-    model_config = {"extra": "allow"}
+    sources: list[str] = Field(default_factory=list, description="Source filenames")
+    chunk_ids: list[str] = Field(
+        default_factory=list,
+        description="Chunk IDs the entity was found in",
+    )
+    raw_mention: str | None = Field(
+        default=None, description="Verbatim mention from source"
+    )
+    extraction_confidence: str | None = Field(
+        default=None,
+        description="'explicit' (stated outright) | 'inferred' (derived).",
+    )
 
 
 # Registry of named base classes that an entity type can inherit from.

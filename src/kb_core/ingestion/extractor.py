@@ -1,4 +1,10 @@
-"""LLM-based structured knowledge extraction from paper chunks using Gemini."""
+"""LLM-based structured knowledge extraction from paper chunks using Gemini.
+
+The schema (entity types, fields, descriptions) is now data-driven: each
+project's `schema/knowledge.json` defines what to extract. The extractor
+builds the LLM prompt by walking the entity types, and validates each
+returned entity through the dynamically-generated Pydantic class.
+"""
 
 from __future__ import annotations
 
@@ -10,9 +16,11 @@ from pathlib import Path
 
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 from ..config import DomainContext
-from ..schema import ExtractionResult, KnowledgeChunk
+from ..schema import KnowledgeChunk
+from ..schema_engine import ExtractionResult, FieldSpec, SchemaFile
 from .pdf_processor import PDFProcessor
 
 
@@ -26,115 +34,58 @@ Return ONLY valid JSON — no explanation, no markdown fences.
 If a field value is not mentioned, omit it or use null.
 """).strip()
 
-_EXTRACTION_PROMPT_TEMPLATE = textwrap.dedent("""
-Extract structured knowledge from the text below.
-Return a JSON object. Only include keys that have data; omit empty arrays.
 
-=== SCHEMA ===
+def _format_field_line(f: FieldSpec) -> str:
+    type_repr = f.type
+    if f.type == "list":
+        type_repr = f"list[{f.item_type or 'str'}]"
+    elif f.type == "enum":
+        type_repr = f"enum({' | '.join(f.enum_values or [])})"
+    flag = "required" if f.required else "optional"
+    desc = f" — {f.description}" if f.description else ""
+    return f"    - {f.name} ({type_repr}, {flag}){desc}"
 
-"strains": list of host strains. {strains_hint}
-  {{
-    "name": "strain name",
-    "genotype": "genetic markers, e.g. his4, Mut+, Muts",
-    "methanol_utilization": "Mut+ | Muts | Mut-",
-    "protease_deficiency": "e.g. pep4, prb1 or null",
-    "notes": "any relevant detail"
-  }}
 
-"promoters": transcriptional promoters. {promoters_hint}
-  {{
-    "name": "promoter name",
-    "expression_type": "constitutive | inducible | hybrid",
-    "inducer": "methanol / formaldehyde / null",
-    "strength": "relative strength description",
-    "notes": "key characteristics"
-  }}
+def _format_entity_block(et, hint: str) -> str:
+    lines = [f"\n\"{et.resolved_extraction_key()}\" (type {et.name}): {et.description or ''}"]
+    if hint:
+        lines.append(f"  Hint: {hint.strip()}")
+    if et.fields:
+        lines.append("  Fields:")
+        for f in et.fields:
+            # Skip provenance fields — the extractor injects them after the LLM call.
+            if f.name in {"sources", "chunk_ids", "raw_mention", "extraction_confidence"}:
+                continue
+            lines.append(_format_field_line(f))
+    return "\n".join(lines)
 
-"vectors": expression vectors / plasmids. {vectors_hint}
-  {{
-    "name": "vector name",
-    "promoter": "promoter used",
-    "secretion_signal": "alpha-MF | PHO1 | OST1 | none | other",
-    "selection_marker": "HIS4 | Zeocin | G418 | Blasticidin | other",
-    "integration_site": "AOX1 | AOX2 | HIS4 | GAP | other",
-    "notes": "key features"
-  }}
 
-"media": culture / fermentation media. {media_hint}
-  {{
-    "name": "medium name",
-    "composition": {{"component": "amount/concentration"}},
-    "carbon_source": "glycerol / methanol / glucose etc.",
-    "nitrogen_source": "yeast extract / ammonium sulfate etc.",
-    "ph_range": "e.g. 5.0–6.0",
-    "purpose": "growth phase / induction phase / seed culture",
-    "notes": ""
-  }}
+def _build_prompt_template(schema_spec: SchemaFile, hints: dict[str, str]) -> str:
+    """Build the per-chunk extraction prompt from the project's knowledge schema."""
+    blocks = []
+    for et in schema_spec.entity_types:
+        # Hint key is the extraction_key (e.g. "strains") so projects can
+        # configure hints per JSON output key.
+        hint = hints.get(et.resolved_extraction_key(), "")
+        blocks.append(_format_entity_block(et, hint))
+    blocks_text = "\n".join(blocks)
 
-"fermentation_conditions": process parameters for each phase.
-  Look for temperature, pH, DO, agitation, feed strategy, induction time, etc.
-  {{
-    "phase": "e.g. glycerol batch / methanol induction",
-    "mode": "batch | fed-batch | continuous | methanol_induction",
-    "temperature_celsius": "value or range",
-    "ph": "set-point or range",
-    "dissolved_oxygen_percent": "e.g. >20%",
-    "agitation_rpm": "value or range",
-    "feeding_strategy": "description of carbon feed",
-    "duration_hours": "duration if mentioned",
-    "notes": "other relevant details"
-  }}
+    return textwrap.dedent("""
+        Extract structured knowledge from the text below.
+        Return a JSON object whose top-level keys are the entity types listed
+        below. Each value is a list of objects matching that entity type's
+        fields. Only include keys that have data; omit empty arrays.
 
-"glycosylation_patterns": glycosylation info (N-linked, O-linked, mannosylation, etc.).
-  {{
-    "glycosylation_type": "N-linked | O-linked | none",
-    "typical_glycan_structure": "e.g. high-mannose Man8-14",
-    "impact_on_activity": "effect on protein activity",
-    "engineering_strategies": ["e.g. OCH1 knockout", "humanization"],
-    "notes": ""
-  }}
+        === ENTITY TYPES ===
+        {blocks}
 
-"target_products": recombinant proteins or metabolites being produced. {target_products_hint}
-  {{
-    "name": "product name",
-    "type": "enzyme | antibody fragment | VLP | metabolite | structural protein | other",
-    "gene_source": "origin organism",
-    "codon_optimized": true | false | null,
-    "molecular_weight_kda": number or null,
-    "expected_yield": "e.g. 500 mg/L",
-    "desired_modifications": ["hydroxylation", "signal peptide cleavage", etc.],
-    "activity_assay": "how activity is measured",
-    "notes": ""
-  }}
+        === SOURCE INFO ===
+        Section: {{section}}
+        File: {{source_file}}
 
-"process_parameters": quantitative process parameters (yield, growth rate, density, etc.).
-  {{
-    "parameter_name": "full name",
-    "symbol": "e.g. qP, μ, DCW",
-    "unit": "unit",
-    "typical_range": "value range",
-    "optimal_value": "best known value",
-    "effect_on_expression": "how this affects yield/quality",
-    "notes": ""
-  }}
-
-"analytical_methods": characterization / analytical methods (SDS-PAGE, HPLC, etc.).
-  {{
-    "name": "method name",
-    "purpose": "what it measures",
-    "sample_type": "culture supernatant / cell lysate / purified protein",
-    "key_conditions": {{"param": "value"}},
-    "interpretation_notes": "how to read results",
-    "notes": ""
-  }}
-
-=== SOURCE INFO ===
-Section: {section}
-File: {source_file}
-
-=== TEXT TO EXTRACT FROM ===
-{text}
-""").strip()
+        === TEXT TO EXTRACT FROM ===
+        {{text}}
+        """).strip().format(blocks=blocks_text)
 
 
 class KnowledgeExtractor:
@@ -143,6 +94,8 @@ class KnowledgeExtractor:
     def __init__(
         self,
         domain: DomainContext,
+        knowledge_spec: SchemaFile,
+        knowledge_models: dict[str, type[BaseModel]],
         model: str = "gemini-2.5-flash",
         cache_dir: Path | None = None,
         request_timeout_ms: int = 120_000,
@@ -157,8 +110,20 @@ class KnowledgeExtractor:
         )
         self.model = model
         self.domain = domain
+        self.knowledge_spec = knowledge_spec
+        self.knowledge_models = knowledge_models
         self.pdf_processor = PDFProcessor(cache_dir=cache_dir, keywords=keywords or [])
         self._system = _EXTRACTION_SYSTEM.format(expert_field=domain.expert_field)
+        self._prompt_template = _build_prompt_template(
+            knowledge_spec, domain.entity_hints
+        )
+        # Map extraction_key → (entity_type_name, model_class)
+        self._key_to_model: dict[str, tuple[str, type[BaseModel]]] = {}
+        for et in knowledge_spec.entity_types:
+            cls = knowledge_models.get(et.name)
+            if cls is None:
+                continue
+            self._key_to_model[et.resolved_extraction_key()] = (et.name, cls)
 
     def extract_from_pdf(self, pdf_path: Path, source_ref: str | None = None) -> ExtractionResult:
         chunks = self.pdf_processor.process(pdf_path)
@@ -186,16 +151,10 @@ class KnowledgeExtractor:
     # ── private ──────────────────────────────────────────────────────────────
 
     def _extract_chunk(self, chunk: KnowledgeChunk) -> dict | None:
-        hints = self.domain.entity_hints
-        prompt = _EXTRACTION_PROMPT_TEMPLATE.format(
+        prompt = self._prompt_template.format(
             section=chunk.section or "unknown",
             source_file=chunk.source_file,
             text=chunk.content,
-            strains_hint=hints.get("strains", ""),
-            promoters_hint=hints.get("promoters", ""),
-            vectors_hint=hints.get("vectors", ""),
-            media_hint=hints.get("media", ""),
-            target_products_hint=hints.get("target_products", ""),
         )
         try:
             response = self.client.models.generate_content(
@@ -237,40 +196,28 @@ class KnowledgeExtractor:
     ) -> None:
         ref = [source_file]
         chunk_ref = [chunk_id]
-        field_to_class = {
-            "strains": "Strain",
-            "promoters": "Promoter",
-            "vectors": "ExpressionVector",
-            "media": "CultureMedium",
-            "fermentation_conditions": "FermentationConditionFact",
-            "glycosylation_patterns": "GlycosylationPattern",
-            "target_products": "TargetProduct",
-            "process_parameters": "ProcessParameter",
-            "analytical_methods": "AnalyticalMethod",
-        }
-        from .. import schema as schema_module
-        for field_name, class_name in field_to_class.items():
-            items = data.get(field_name, [])
+        for key, (type_name, cls) in self._key_to_model.items():
+            items = data.get(key, [])
             if not items:
                 continue
-            cls = getattr(schema_module, class_name)
-            existing_list: list = getattr(target, field_name)
+            existing_list = target.entities.setdefault(key, [])
             for item_data in items:
                 # The LLM occasionally emits ``None`` for list-typed fields
-                # (e.g. ``desired_modifications: null``) and produces
-                # placeholder entries with ``name: null`` that aren't really
-                # entities. Drop None values so pydantic defaults kick in,
-                # then skip silently if the identifying ``name`` is missing.
+                # and produces placeholder entries with ``name: null`` that
+                # aren't really entities. Drop None values so pydantic
+                # defaults kick in, then skip silently if the identifying
+                # ``name`` is missing.
                 item_data = {k: v for k, v in item_data.items() if v is not None}
                 if "name" in cls.model_fields and not item_data.get("name"):
                     continue
                 item_data.setdefault("sources", ref)
                 item_data.setdefault("chunk_ids", chunk_ref)
                 try:
-                    existing_list.append(cls(**item_data))
+                    validated = cls(**item_data)
+                    existing_list.append(validated.model_dump(exclude_none=True))
                 except Exception as e:
                     print(
-                        f"  [warn] {class_name} validation failed: "
+                        f"  [warn] {type_name} validation failed: "
                         f"{type(e).__name__}: {e}",
                         file=sys.stderr,
                     )

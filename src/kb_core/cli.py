@@ -22,6 +22,7 @@ from .ingestion import (PDFProcessor, KnowledgeExtractor, ProcessKnowledgeSynthe
                         normalize_all, build_registry, save_registry,
                         ExperimentExtractor, LineageExtractor)
 from .qa import Assistant
+from .schema_engine import load_project_schemas
 
 app = typer.Typer(
     name="kb",
@@ -57,6 +58,11 @@ def _load_cfg(project_dir: Path):
     return load_project_config(project_dir)
 
 
+def _load_schemas(project_dir: Path):
+    """Load project schemas (knowledge/experiments/data)."""
+    return load_project_schemas(project_dir)
+
+
 # ── Commands ──────────────────────────────────────────────────────────────────
 
 @app.command()
@@ -71,7 +77,17 @@ def ingest(
     cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
-    extractor = KnowledgeExtractor(domain=cfg.domain, model=model, cache_dir=cache_dir)
+    schemas = _load_schemas(data_dir)
+    if schemas.knowledge_spec is None:
+        console.print("[red]Project is missing schema/knowledge.json — cannot extract entities.[/red]")
+        raise typer.Exit(1)
+    extractor = KnowledgeExtractor(
+        domain=cfg.domain,
+        knowledge_spec=schemas.knowledge_spec,
+        knowledge_models=schemas.knowledge_models,
+        model=model,
+        cache_dir=cache_dir,
+    )
     processor = PDFProcessor(cache_dir=cache_dir, keywords=cfg.keywords)
 
     pdfs: list[Path] = []
@@ -120,7 +136,17 @@ def add(
     cfg = _load_cfg(data_dir)
     kb = _get_kb(data_dir)
     cache_dir = data_dir / "cache"
-    extractor = KnowledgeExtractor(domain=cfg.domain, model=model, cache_dir=cache_dir)
+    schemas = _load_schemas(data_dir)
+    if schemas.knowledge_spec is None:
+        console.print("[red]Project is missing schema/knowledge.json — cannot extract entities.[/red]")
+        raise typer.Exit(1)
+    extractor = KnowledgeExtractor(
+        domain=cfg.domain,
+        knowledge_spec=schemas.knowledge_spec,
+        knowledge_models=schemas.knowledge_models,
+        model=model,
+        cache_dir=cache_dir,
+    )
     processor = PDFProcessor(cache_dir=cache_dir, keywords=cfg.keywords)
     synth = ProcessKnowledgeSynthesizer(domain=cfg.domain, model=model, cache_dir=cache_dir)
 
@@ -354,10 +380,10 @@ def chat(
     ))
     kb_summary = kb.summary()
     console.print(
-        f"Knowledge base: {kb_summary['vector_chunks']} chunks | "
-        f"{kb_summary['documents']} documents | "
-        f"{kb_summary['strains']} strains | "
-        f"{kb_summary['target_products']} products\n"
+        f"Knowledge base: {kb_summary.get('vector_chunks', 0)} chunks | "
+        f"{kb_summary.get('documents', 0)} documents | "
+        f"{kb_summary.get('strains', 0)} strains | "
+        f"{kb_summary.get('target_products', 0)} products\n"
     )
 
     while True:

@@ -58,11 +58,18 @@ class EntityTypeDefinition(BaseModel):
 
     name: str  # PascalCase, used as the dynamic Pydantic class name
     description: str | None = None
+    extraction_key: str | None = Field(
+        default=None,
+        description="The JSON key the LLM emits these entities under, e.g. 'strains' for Strain. Defaults to lowercase(name)+'s'.",
+    )
     inherits: list[str] = Field(
         default_factory=list,
         description="Names from INHERITABLE_BASES, e.g. ['provenance']",
     )
     fields: list[FieldSpec] = Field(default_factory=list)
+
+    def resolved_extraction_key(self) -> str:
+        return self.extraction_key or (self.name.lower() + "s")
 
 
 class SchemaFile(BaseModel):

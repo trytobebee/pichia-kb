@@ -7,8 +7,9 @@ from pathlib import Path
 
 from .vector_store import VectorStore
 from .structured_store import StructuredStore
-from ..schema import KnowledgeChunk, ExtractionResult
+from ..schema import KnowledgeChunk
 from ..schema.dialectical import DialecticalReview
+from ..schema_engine import ExtractionResult
 
 
 def _count_hits(searchable: str, q_words: set[str]) -> int:

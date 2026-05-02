@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..schema import ExtractionResult
 from ..schema.dialectical import DialecticalReview
 from ..schema.experiments import PaperExperiments
+from ..schema_engine import ExtractionResult
 
 
 class StructuredStore:
@@ -35,40 +35,44 @@ class StructuredStore:
 
     def load_all(self) -> list[ExtractionResult]:
         results = []
-        for f in self._path.glob("*.json"):
-            if f.name == self._PROCESS_KB_FILE:
+        # Per-paper extraction files end in .pdf.json; the process knowledge
+        # / domain / dialectical files live under different names.
+        excluded = {self._PROCESS_KB_FILE, self._DIALECTICAL_FILE, self._DOMAIN_KB_FILE}
+        for f in self._path.glob("*.pdf.json"):
+            if f.name in excluded:
                 continue
             try:
                 data = json.loads(f.read_text(encoding="utf-8"))
-                results.append(ExtractionResult(**data))
+                results.append(ExtractionResult.from_dict(data))
             except Exception:
                 pass
         return results
 
     def get_all_entities(self, entity_type: str) -> list[dict]:
+        """Return entities of a given extraction_key across all papers,
+        each annotated with `_source_doc`."""
         entities = []
         for r in self.load_all():
-            items = getattr(r, entity_type, [])
-            for item in items:
-                d = item.model_dump(exclude_none=True)
+            for item in r.entities.get(entity_type, []):
+                d = dict(item)
                 d["_source_doc"] = r.source_file
                 entities.append(d)
         return entities
 
     def summary(self) -> dict:
-        totals: dict[str, int] = {
-            "strains": 0, "promoters": 0, "vectors": 0, "media": 0,
-            "fermentation_conditions": 0, "glycosylation_patterns": 0,
-            "target_products": 0, "process_parameters": 0,
-            "analytical_methods": 0, "documents": 0,
-        }
+        """Counts per entity type discovered in the stored extractions,
+        plus document count. Entity type list is whatever appears in the
+        data (driven by the project's knowledge schema, not hardcoded)."""
+        per_type: dict[str, int] = {}
+        n_docs = 0
         for r in self.load_all():
-            totals["documents"] += 1
-            for k in totals:
-                if k == "documents":
-                    continue
-                totals[k] += len(getattr(r, k, []))
-        return totals
+            n_docs += 1
+            for key, items in r.entities.items():
+                per_type[key] = per_type.get(key, 0) + len(items)
+        out: dict[str, int] = {"documents": n_docs}
+        for key in sorted(per_type):
+            out[key] = per_type[key]
+        return out
 
     # ── Process knowledge store ───────────────────────────────────────────────
 

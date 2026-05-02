@@ -70,13 +70,20 @@ def build_class(entity_type: EntityTypeDefinition) -> type[BaseModel]:
 
     for f in entity_type.fields:
         py_type = _python_type_for(f)
-        if not f.required:
-            py_type = Optional[py_type]
-            default = f.default
-        else:
-            default = ...  # required sentinel for create_model
+        if f.required:
+            field_info = Field(default=..., description=f.description)
+            field_defs[f.name] = (py_type, field_info)
+            continue
 
-        field_info = Field(default=default, description=f.description)
+        # Optional: use default_factory for containers so each instance gets
+        # its own empty collection (matches the original Pydantic schema).
+        if f.type == "list" and f.default is None:
+            field_info = Field(default_factory=list, description=f.description)
+        elif f.type == "dict" and f.default is None:
+            field_info = Field(default_factory=dict, description=f.description)
+        else:
+            py_type = Optional[py_type]
+            field_info = Field(default=f.default, description=f.description)
         field_defs[f.name] = (py_type, field_info)
 
     bases = _resolve_bases(entity_type.inherits)

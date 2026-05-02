@@ -163,16 +163,26 @@ def normalize_result(result: dict) -> tuple[dict, dict[str, int]]:
     """Normalize one ExtractionResult dict in place; return (result, stats).
 
     stats maps entity_type → records_removed.
+
+    Accepts both the legacy layout (entity lists at top level) and the
+    current layout (under ``entities``); always writes the current layout.
     """
     stats: dict[str, int] = {}
+    entities = result.setdefault("entities", {})
+
+    # Migrate legacy top-level keys into entities/.
+    for entity_type in list(_ENTITY_KEY):
+        if entity_type in result and entity_type != "entities":
+            entities.setdefault(entity_type, result.pop(entity_type))
+
     for entity_type, key_field in _ENTITY_KEY.items():
-        original = result.get(entity_type, [])
+        original = entities.get(entity_type, [])
         if not original:
             continue
         normalized = _normalize_entity_list(original, key_field)
         removed = len(original) - len(normalized)
         stats[entity_type] = removed
-        result[entity_type] = normalized
+        entities[entity_type] = normalized
     return result, stats
 
 

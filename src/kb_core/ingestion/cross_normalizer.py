@@ -56,14 +56,19 @@ _DEFAULT_ENTITY_TYPE_DESC: dict[str, str] = {
 
 def _collect(structured_dir: Path) -> dict[str, list[dict]]:
     """Load all per-paper JSONs; return {entity_type: [entity_dict, ...]}
-    where each entity_dict has an extra '_paper' key."""
+    where each entity_dict has an extra '_paper' key.
+
+    Tolerates both legacy layout (entity lists at top level) and current
+    layout (under ``entities``).
+    """
     collected: dict[str, list[dict]] = defaultdict(list)
     for path in sorted(structured_dir.glob("*.pdf.json")):
-        paper = path.name  # e.g. "王婧.pdf.json"
+        paper = path.name
         with path.open(encoding="utf-8") as f:
             data = json.load(f)
+        entity_root = data.get("entities") if isinstance(data.get("entities"), dict) else data
         for etype in _ENTITY_KEY:
-            for entity in data.get(etype, []):
+            for entity in entity_root.get(etype, []):
                 e = dict(entity)
                 e["_paper"] = paper
                 collected[etype].append(e)

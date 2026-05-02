@@ -14,6 +14,7 @@ A project's domain schema lives in JSON files at
 """
 
 from .dynamic import build_class, build_models
+from .extraction_result import ExtractionResult
 from .loader import ProjectSchemas, load_project_schemas
 from .meta import EntityTypeDefinition, FieldSpec, SchemaFile
 from .provenance import INHERITABLE_BASES, EntityProvenance
@@ -28,4 +29,5 @@ __all__ = [
     "load_project_schemas",
     "EntityProvenance",
     "INHERITABLE_BASES",
+    "ExtractionResult",
 ]

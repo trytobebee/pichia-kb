@@ -1,0 +1,160 @@
+{
+  "system": "knowledge",
+  "version": 1,
+  "entity_types": [
+    {
+      "name": "Strain",
+      "description": "Pichia pastoris (Komagataella phaffii) host strain.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true,
+         "description": "Strain designation, e.g. GS115, X-33, CBS7435"},
+        {"name": "aliases", "type": "list", "item_type": "str"},
+        {"name": "genotype", "type": "str",
+         "description": "Key genetic markers, e.g. his4, Muts, Mut+"},
+        {"name": "methanol_utilization", "type": "str",
+         "description": "Methanol utilization phenotype: Mut+ / Muts / Mut-"},
+        {"name": "protease_deficiency", "type": "str"},
+        {"name": "parent_strain", "type": "str"},
+        {"name": "copy_number", "type": "str",
+         "description": "Reported gene copy number, e.g. '10-copy', '1-3 copies'"},
+        {"name": "engineering_modifications", "type": "list", "item_type": "str",
+         "description": "Reported edits beyond the parent, e.g. 'Prm1 overexpression'"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "Promoter",
+      "description": "Transcriptional promoter used in the expression system.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true,
+         "description": "e.g. AOX1, GAP, FLD1, PEX8"},
+        {"name": "expression_type", "type": "str",
+         "description": "constitutive / inducible / hybrid"},
+        {"name": "inducer", "type": "str"},
+        {"name": "strength", "type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "ExpressionVector",
+      "description": "Plasmid / expression vector.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true,
+         "description": "Vector name, e.g. pPICZα, pGAPZ, pPIC9K"},
+        {"name": "promoter", "type": "str"},
+        {"name": "secretion_signal", "type": "str",
+         "description": "alpha-MF / PHO1 / OST1 / none / other"},
+        {"name": "selection_marker", "type": "str",
+         "description": "HIS4 / Zeocin / G418 / Blasticidin / other"},
+        {"name": "integration_site", "type": "str",
+         "description": "AOX1 / AOX2 / HIS4 / GAP / other"},
+        {"name": "copy_number_effect", "type": "str"},
+        {"name": "his4_complementation", "type": "bool"},
+        {"name": "tag", "type": "str",
+         "description": "Affinity/epitope tag, e.g. His6, FLAG"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "CultureMedium",
+      "description": "Defined or complex culture medium formulation.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true,
+         "description": "Medium designation, e.g. BMMY, BMGY, FM22, BSM"},
+        {"name": "composition", "type": "dict"},
+        {"name": "carbon_source", "type": "str"},
+        {"name": "nitrogen_source", "type": "str"},
+        {"name": "trace_elements", "type": "dict"},
+        {"name": "ph_range", "type": "str"},
+        {"name": "purpose", "type": "str",
+         "description": "Growth phase / induction phase / seed culture, etc."},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "FermentationConditionFact",
+      "description": "Process parameters reported for a specific phase or experiment (Layer 3 raw fact).",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "phase", "type": "str",
+         "description": "e.g. glycerol batch, glycerol fed-batch, methanol induction"},
+        {"name": "mode", "type": "str",
+         "description": "batch / fed-batch / continuous / methanol_induction"},
+        {"name": "temperature_celsius", "type": "str"},
+        {"name": "ph", "type": "str"},
+        {"name": "dissolved_oxygen_percent", "type": "str"},
+        {"name": "agitation_rpm", "type": "str"},
+        {"name": "aeration_vvm", "type": "str"},
+        {"name": "feeding_strategy", "type": "str"},
+        {"name": "duration_hours", "type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "GlycosylationPattern",
+      "description": "N- or O-linked glycosylation characteristics.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "glycosylation_type", "type": "str",
+         "description": "N-linked / O-linked / none"},
+        {"name": "site_motif", "type": "str"},
+        {"name": "typical_glycan_structure", "type": "str"},
+        {"name": "impact_on_activity", "type": "str"},
+        {"name": "engineering_strategies", "type": "list", "item_type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "TargetProduct",
+      "description": "Target recombinant protein or metabolite to be produced.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true},
+        {"name": "type", "type": "str",
+         "description": "e.g. enzyme, antibody fragment, VLP, metabolite, structural protein"},
+        {"name": "gene_source", "type": "str"},
+        {"name": "codon_optimized", "type": "bool"},
+        {"name": "molecular_weight_kda", "type": "float"},
+        {"name": "expected_yield", "type": "str"},
+        {"name": "desired_modifications", "type": "list", "item_type": "str"},
+        {"name": "activity_assay", "type": "str"},
+        {"name": "stability_requirements", "type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "ProcessParameter",
+      "description": "Quantitative process analytical parameter with context.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "parameter_name", "type": "str", "required": true,
+         "description": "e.g. specific methanol consumption rate"},
+        {"name": "symbol", "type": "str"},
+        {"name": "unit", "type": "str"},
+        {"name": "typical_range", "type": "str"},
+        {"name": "optimal_value", "type": "str"},
+        {"name": "effect_on_expression", "type": "str"},
+        {"name": "measurement_method", "type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    },
+    {
+      "name": "AnalyticalMethod",
+      "description": "Method used to characterize product or process.",
+      "inherits": ["provenance"],
+      "fields": [
+        {"name": "name", "type": "str", "required": true,
+         "description": "e.g. SDS-PAGE, Western Blot, HPLC-SEC, LC-MS/MS"},
+        {"name": "purpose", "type": "str"},
+        {"name": "sample_type", "type": "str"},
+        {"name": "key_conditions", "type": "dict"},
+        {"name": "interpretation_notes", "type": "str"},
+        {"name": "notes", "type": "str", "default": ""}
+      ]
+    }
+  ]
+}
