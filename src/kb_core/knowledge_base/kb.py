@@ -7,8 +7,8 @@ from pathlib import Path
 
 from .vector_store import VectorStore
 from .structured_store import StructuredStore
-from ..schema import KnowledgeChunk
-from ..schema.dialectical import DialecticalReview
+from ..schema_engine import KnowledgeChunk
+from ..schema_engine import DialecticalReview
 from ..schema_engine import ExtractionResult, load_project_schemas
 
 

@@ -13,6 +13,16 @@ A project's domain schema lives in JSON files at
 `data/projects/<slug>/schema/{knowledge,experiments,data}.json`.
 """
 
+from .audit import append_audit_entry
+from .chunk import KnowledgeChunk
+from .dialectical import (
+    ConflictPoint,
+    ConsensusPoint,
+    DialecticalReview,
+    EvidenceStrength,
+    PaperPosition,
+    TopicSynthesis,
+)
 from .dynamic import build_class, build_models
 from .extraction_result import ExtractionResult
 from .loader import ProjectSchemas, load_project_schemas
@@ -32,4 +42,12 @@ __all__ = [
     "INHERITABLE_BASES",
     "ExtractionResult",
     "PaperExperiments",
+    "KnowledgeChunk",
+    "DialecticalReview",
+    "TopicSynthesis",
+    "ConsensusPoint",
+    "ConflictPoint",
+    "PaperPosition",
+    "EvidenceStrength",
+    "append_audit_entry",
 ]

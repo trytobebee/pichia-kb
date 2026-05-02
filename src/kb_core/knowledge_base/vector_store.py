@@ -7,7 +7,7 @@ from pathlib import Path
 import chromadb
 from chromadb.utils import embedding_functions
 
-from ..schema import KnowledgeChunk
+from ..schema_engine import KnowledgeChunk
 
 
 class VectorStore:

@@ -18,7 +18,7 @@ from google import genai
 from google.genai import types
 
 from ..config import DomainContext
-from ..schema.dialectical import DialecticalReview
+from ..schema_engine import DialecticalReview
 
 
 _REVIEW_SYSTEM = textwrap.dedent("""

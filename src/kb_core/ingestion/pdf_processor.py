@@ -6,7 +6,7 @@ import hashlib
 import re
 from pathlib import Path
 
-from ..schema import KnowledgeChunk
+from ..schema_engine import KnowledgeChunk
 from .pdf_text import read_pdf_text
 
 

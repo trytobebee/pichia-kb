@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ..schema.dialectical import DialecticalReview
+from ..schema_engine import DialecticalReview
 from ..schema_engine import ExtractionResult, PaperExperiments, ProjectSchemas
 
 

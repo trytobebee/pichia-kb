@@ -17,11 +17,6 @@ from google import genai
 from google.genai import types
 
 from ..config import DomainContext
-from ..schema.process_knowledge import (
-    ControlPrinciple, ProcessStageSpec, FermentationProtocol,
-    TroubleshootingEntry, ProductQualityFactor,
-    ProcessStage, ControlPriority,
-)
 from .pdf_text import read_pdf_text
 
 

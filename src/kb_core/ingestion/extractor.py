@@ -19,7 +19,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from ..config import DomainContext
-from ..schema import KnowledgeChunk
+from ..schema_engine import KnowledgeChunk
 from ..schema_engine import ExtractionResult, FieldSpec, SchemaFile
 from .pdf_processor import PDFProcessor
 
