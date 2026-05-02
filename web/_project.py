@@ -95,3 +95,22 @@ def get_assistant():
         st.session_state.assistant_project = slug
         st.session_state.messages = []
     return st.session_state.assistant
+
+
+def get_curator_agent():
+    """Return a CuratorAgent scoped to the current project.
+
+    Holds its own conversation history (separate from the QA assistant)
+    so the user can independently iterate on schema changes.
+    """
+    from kb_core.curator import CuratorAgent
+
+    slug = current_project()
+    if (
+        "curator_agent" not in st.session_state
+        or st.session_state.get("curator_agent_project") != slug
+    ):
+        st.session_state.curator_agent = CuratorAgent(current_project_dir())
+        st.session_state.curator_agent_project = slug
+        st.session_state.curator_messages = []
+    return st.session_state.curator_agent

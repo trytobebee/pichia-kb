@@ -7,6 +7,7 @@ Phase 4c: the agent runtime (Gemini + tool calling).
 Phase 4d: web chat panel.
 """
 
+from .agent import CuratorAgent
 from .inspection import (
     compute_field_completeness,
     find_papers_with_field,
@@ -21,6 +22,7 @@ from .mutations import (
 )
 
 __all__ = [
+    "CuratorAgent",
     "add_entity_type",
     "add_field",
     "remove_field",
