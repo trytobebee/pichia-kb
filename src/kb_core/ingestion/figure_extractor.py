@@ -8,19 +8,17 @@ Step 3 (Gemini vision): read the image + text context, return structured data.
 
 from __future__ import annotations
 
-import base64
 import json
-import os
 import re
 import sys
 import textwrap
 from pathlib import Path
 
 import pdfplumber
-from google import genai
-from google.genai import types
 
 from pydantic import BaseModel
+
+from ..llm import get_llm
 from .pdf_text import read_pdf_text
 
 
@@ -153,7 +151,7 @@ class FigureExtractor:
         self.model = model
         self.dpi = dpi
         self.cache_dir = cache_dir
-        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+        self.llm = get_llm(model)
         self.domain = domain
         self.figure_data_cls = figure_data_cls
         self._system = _FIGURE_SYSTEM.format(field_summary=domain.field_summary)
@@ -361,33 +359,20 @@ class FigureExtractor:
                 + prompt
             )
 
-        img_bytes = img_path.read_bytes()
-        b64 = base64.standard_b64encode(img_bytes).decode()
-
-        # 2.5-flash supports thinking_budget=0 (low latency); 2.5-pro requires >0.
-        # When the call carries refinement hints (expected_x_categories), enable
-        # dynamic thinking on Flash too — counting bars + aligning to a prior list
-        # benefits from reasoning.
-        gen_config_kwargs = {
-            "system_instruction": self._system,
-            "max_output_tokens": 8192,
-            "temperature": 0.1,
-        }
-        if "flash" in self.model.lower():
-            gen_config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
         try:
-            response = self.client.models.generate_content(
-                model=self.model,
-                contents=[
-                    types.Part.from_bytes(data=img_bytes, mime_type="image/png"),
-                    prompt,
-                ],
-                config=types.GenerateContentConfig(**gen_config_kwargs),
+            data = self.llm.chat_vision_json(
+                prompt, img_path,
+                system=self._system,
+                temperature=0.1, max_tokens=8192,
             )
-            raw = response.text.strip()
-            if raw.startswith("```"):
-                raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-            data = json.loads(raw)
+        except NotImplementedError:
+            print(
+                f"      [error] model {self.model} ({self.llm.provider}) does not "
+                f"support vision input. Pick a vision model (gemini-*, qwen-vl-*, "
+                f"doubao-*-vision-*, gpt-4o, ...).",
+                file=sys.stderr,
+            )
+            data = {}
         except Exception as e:
             print(f"      [warn] vision extraction failed for {figure_id}: {e}", file=sys.stderr)
             data = {}

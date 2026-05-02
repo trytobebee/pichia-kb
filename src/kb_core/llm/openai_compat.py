@@ -10,8 +10,11 @@ The provider is detected from the model id (or explicit base_url):
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
+from pathlib import Path
 from typing import Any, Iterator
 
 from openai import OpenAI
@@ -19,16 +22,24 @@ from openai import OpenAI
 from .base import LLMBackend
 
 
-# (env_var_name, base_url) pairs
+# (env_var_name, base_url) pairs. Add new providers here.
 _PROVIDER_DEFAULTS = {
-    "deepseek": ("DEEPSEEK_API_KEY", "https://api.deepseek.com/v1"),
-    "openai":   ("OPENAI_API_KEY",   "https://api.openai.com/v1"),
+    "deepseek": ("DEEPSEEK_API_KEY",  "https://api.deepseek.com/v1"),
+    "openai":   ("OPENAI_API_KEY",    "https://api.openai.com/v1"),
+    # 阿里灵积(Dashscope)兼容模式 — covers Qwen / Qwen-VL family.
+    "qwen":     ("DASHSCOPE_API_KEY", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    # 火山引擎(Volcengine ARK)— covers Doubao chat + vision.
+    "doubao":   ("ARK_API_KEY",       "https://ark.cn-beijing.volces.com/api/v3"),
 }
 
 
 def _detect_provider(model: str) -> str:
     if model.startswith("deepseek"):
         return "deepseek"
+    if model.startswith("qwen") or model.startswith("qwen2") or model.startswith("qwen3"):
+        return "qwen"
+    if model.startswith("doubao"):
+        return "doubao"
     return "openai"
 
 
@@ -131,6 +142,56 @@ class OpenAIBackend(LLMBackend):
             max_tokens=max_tokens,
             response_format={"type": "json_object"},
         )
+        raw = (resp.choices[0].message.content or "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+        return json.loads(raw)
+
+    def chat_vision_json(
+        self,
+        prompt: str,
+        image_path: Path,
+        *,
+        system: str | None = None,
+        temperature: float = 0.1,
+        max_tokens: int = 8192,
+    ) -> dict[str, Any]:
+        """Send an image + text prompt to a vision-capable OpenAI-compatible
+        model. Used for Qwen-VL, Doubao-vision, GPT-4o, etc.
+
+        Note: not all providers under this backend support vision. DeepSeek
+        as of writing does not (server returns "[Unsupported Image]").
+        Caller should pick a vision model id (qwen-vl-*, doubao-*-vision-*,
+        gpt-4o, ...).
+        """
+        mime, _ = mimetypes.guess_type(str(image_path))
+        mime = mime or "image/png"
+        img_b64 = base64.b64encode(Path(image_path).read_bytes()).decode()
+        sys = (system or "").rstrip()
+        if "json" not in sys.lower():
+            sys = f"{sys}\n\nReturn ONLY valid JSON.".strip()
+        user_content = [
+            {"type": "text", "text": prompt},
+            {"type": "image_url",
+             "image_url": {"url": f"data:{mime};base64,{img_b64}"}},
+        ]
+        # Some OAI-compat servers (Qwen) don't accept response_format on
+        # vision endpoints. Try with json_object first, fall back without.
+        try:
+            resp = self.client.chat.completions.create(
+                model=self._model,
+                messages=self._messages([{"role": "user", "content": user_content}], sys),
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+            )
+        except Exception:
+            resp = self.client.chat.completions.create(
+                model=self._model,
+                messages=self._messages([{"role": "user", "content": user_content}], sys),
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
         raw = (resp.choices[0].message.content or "").strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]

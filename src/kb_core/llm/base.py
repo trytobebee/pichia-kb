@@ -9,6 +9,7 @@ The factory in __init__.py picks one based on the model id.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Iterator
 
 
@@ -57,6 +58,21 @@ class LLMBackend(ABC):
         Raises ValueError if the response can't be parsed.
         """
         ...
+
+    def chat_vision_json(
+        self,
+        prompt: str,
+        image_path: "Path",
+        *,
+        system: str | None = None,
+        temperature: float = 0.1,
+        max_tokens: int = 8192,
+    ) -> dict[str, Any]:
+        """Vision + text → JSON. Default impl raises NotImplementedError;
+        backends that support vision override this."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support vision input"
+        )
 
     @property
     @abstractmethod

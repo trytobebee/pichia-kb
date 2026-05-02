@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
+from pathlib import Path
 from typing import Any, Iterator
 
 from google import genai
@@ -102,6 +105,37 @@ class GeminiBackend(LLMBackend):
         response = self.client.models.generate_content(
             model=self._model,
             contents=prompt,
+            config=cfg,
+        )
+        raw = (response.text or "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
+        return json.loads(raw)
+
+    def chat_vision_json(
+        self,
+        prompt: str,
+        image_path: Path,
+        *,
+        system: str | None = None,
+        temperature: float = 0.1,
+        max_tokens: int = 8192,
+    ) -> dict[str, Any]:
+        mime, _ = mimetypes.guess_type(str(image_path))
+        mime = mime or "image/png"
+        img_bytes = Path(image_path).read_bytes()
+        cfg = types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_tokens,
+            temperature=temperature,
+            response_mime_type="application/json",
+        )
+        response = self.client.models.generate_content(
+            model=self._model,
+            contents=[
+                types.Part.from_text(text=prompt),
+                types.Part.from_bytes(data=img_bytes, mime_type=mime),
+            ],
             config=cfg,
         )
         raw = (response.text or "").strip()
