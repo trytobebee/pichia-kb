@@ -1,13 +1,30 @@
-"""ChromaDB-backed vector store for semantic retrieval."""
+"""ChromaDB-backed vector store for semantic retrieval.
+
+Uses BAAI/bge-m3 for embeddings:
+- 1024-dim, trained on multilingual + Chinese-strong corpora
+- 8192-token max input (vs ChromaDB's 256-token default — chunks fit fully)
+- Local CPU/MPS inference via sentence-transformers, no API
+- ~600 MB model auto-downloaded to ~/.cache/huggingface/ on first use
+
+Switching the embedding model requires deleting and re-creating the
+collection because vector dimensionality is incompatible across models.
+"""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import chromadb
 from chromadb.utils import embedding_functions
 
 from ..schema_engine import KnowledgeChunk
+
+
+# Pinned here so changing it forces a deliberate re-ingest. To override
+# without touching code, set KB_EMBEDDING_MODEL in the environment.
+_EMBEDDING_MODEL = os.environ.get("KB_EMBEDDING_MODEL", "BAAI/bge-m3")
+_EMBEDDING_DEVICE = os.environ.get("KB_EMBEDDING_DEVICE", "cpu")
 
 
 class VectorStore:
@@ -17,7 +34,10 @@ class VectorStore:
 
     def __init__(self, db_path: Path) -> None:
         self._client = chromadb.PersistentClient(path=str(db_path))
-        self._ef = embedding_functions.DefaultEmbeddingFunction()
+        self._ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name=_EMBEDDING_MODEL,
+            device=_EMBEDDING_DEVICE,
+        )
         self._collection = self._client.get_or_create_collection(
             name=self.COLLECTION_NAME,
             embedding_function=self._ef,

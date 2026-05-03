@@ -8,6 +8,7 @@ dependencies = [
     "google-genai>=1.73.1",
     "hatchling>=1.29.0",
     "openai>=1.50.0",
+    "sentence-transformers>=2.7.0",
     "pdfplumber>=0.11.9",
     "pydantic>=2.13.3",
     "pymupdf>=1.27.2.3",
