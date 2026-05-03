@@ -166,15 +166,21 @@ class OpenAIBackend(LLMBackend):
         """Provider-specific defaults applied to every call unless caller
         overrides via the explicit `extra_body` argument.
 
-        Currently only qwen — qwen3.6 reasoning models default to
-        thinking-on, which makes simple structured-extraction calls 10x
-        slower with no quality gain. We turn it off so the framework's
-        extractor / vision calls finish quickly. Users who want reasoning
-        (e.g. for cross-paper synthesis) can pass enable_thinking=True
-        explicitly via the `extra_body` arg.
+        Both Qwen3.6 and Doubao seed-2.0 have thinking-mode ON by default,
+        which makes simple structured-extraction calls 3-10x slower with
+        no quality gain. We turn it off so the framework's extractor /
+        vision calls finish quickly. Callers that want reasoning (e.g.
+        for cross-paper synthesis) can override via the explicit
+        `extra_body` arg.
+
+        Note the parameter shape differs:
+          qwen   → {"enable_thinking": False}
+          doubao → {"thinking": {"type": "disabled"}}
         """
         if self._provider == "qwen":
             return {"enable_thinking": False}
+        if self._provider == "doubao":
+            return {"thinking": {"type": "disabled"}}
         return {}
 
     def chat_vision_json(
