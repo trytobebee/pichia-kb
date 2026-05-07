@@ -34,6 +34,11 @@ console = Console()
 # Project layout: data/projects/<slug>/{papers,db,cache,figures,structured,...}
 _PROJECTS_ROOT = Path(__file__).parent.parent.parent / "data" / "projects"
 
+# Default model for all CLI commands. Override per-command with --model, or
+# set globally via KB_DEFAULT_MODEL in the environment (e.g. set to
+# "deepseek-chat" on servers without Google API access).
+_DEFAULT_MODEL = os.environ.get("KB_DEFAULT_MODEL", "gemini-2.5-flash")
+
 
 def _resolve_project(slug: str) -> Path:
     """Return the project directory for a slug. Errors out if it doesn't exist."""
@@ -185,7 +190,7 @@ def ingest(
     pdf: Path = typer.Argument(..., help="Path to PDF paper (or directory of PDFs)"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
     source_ref: str = typer.Option("", help="DOI or citation for this paper"),
-    model: str = typer.Option("gemini-2.5-flash", help="Claude model for extraction"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Claude model for extraction"),
 ):
     """Ingest a PDF paper (or all PDFs in a directory) into the knowledge base."""
     data_dir = _resolve_project(project)
@@ -240,7 +245,7 @@ def ingest(
 def add(
     pdf: Path = typer.Argument(..., help="PDF file or directory to add"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
 ):
     """Add a new paper: ingest + synthesize in one step.
 
@@ -374,7 +379,7 @@ def normalize(
 @app.command("build-registry")
 def build_registry_cmd(
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model for synonym clustering"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model for synonym clustering"),
 ):
     """Layer 3.5: build cross-paper entity registry (rule-based + LLM synonym clustering)."""
     data_dir = _resolve_project(project)
@@ -478,7 +483,7 @@ def search(
 @app.command()
 def chat(
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Claude model for Q&A"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Claude model for Q&A"),
     n_chunks: int = typer.Option(6, help="Number of context chunks to retrieve"),
 ):
     """Interactive Q&A session for the project."""
@@ -527,7 +532,7 @@ def chat(
 def ask(
     question: str = typer.Argument(..., help="Question to ask"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
     n_chunks: int = typer.Option(6, help="Context chunks"),
 ):
     """Ask a single question (non-interactive)."""
@@ -543,7 +548,7 @@ def ask(
 def synthesize(
     pdf: Path = typer.Argument(..., help="PDF file or directory to synthesize process knowledge from"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
 ):
     """Extract fermentation control principles and protocols from papers."""
     data_dir = _resolve_project(project)
@@ -582,7 +587,7 @@ def synthesize(
 @app.command()
 def review(
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-pro", help="Model for dialectical review (use pro for best quality)"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Model for dialectical review (use pro for best quality)"),
 ):
     """Cross-paper dialectical review: find consensus, contradictions, and uncertainties."""
     data_dir = _resolve_project(project)
@@ -816,7 +821,7 @@ def refine_figures_cmd(
     exp: str = typer.Option("", help="Filter by experiment_id (partial match)"),
     fig: str = typer.Option("", help="Filter by figure_id (partial match)"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model. Flash+dynamic thinking is enough for label alignment; use Pro if values are off."),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model. Flash+dynamic thinking is enough for label alignment; use Pro if values are off."),
 ):
     """Re-extract experiment-linked figures using the experiment's varied_parameters as a label prior.
 
@@ -929,7 +934,7 @@ def refine_figures_cmd(
 def extract_experiments(
     pdf: Path = typer.Argument(..., help="PDF file or directory of PDFs"),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-pro", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
 ):
     """Extract structured experiment runs (parameter snapshots + outcome + figure links) from papers."""
     data_dir = _resolve_project(project)
@@ -977,7 +982,7 @@ def extract_experiments(
 def extract_lineage(
     source: str = typer.Option("", help="Filter by paper filename (partial match). Empty = all."),
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-pro", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
 ):
     """Extract intra-paper experiment lineage (parent → child edges) and persist on PaperExperiments."""
     data_dir = _resolve_project(project)
@@ -1155,7 +1160,7 @@ def figures(
 @app.command("domain-knowledge")
 def domain_knowledge_cmd(
     project: str = typer.Option(..., "--project", "-p", help="Project slug"),
-    model: str = typer.Option("gemini-2.5-flash", help="Gemini model"),
+    model: str = typer.Option(_DEFAULT_MODEL, help="Gemini model"),
 ):
     """Synthesize cross-paper domain knowledge: proteins, substrates, yields, challenges, innovations."""
     data_dir = _resolve_project(project)

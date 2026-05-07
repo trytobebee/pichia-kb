@@ -10,6 +10,7 @@ guidelines below are framework-generic; the role description
 
 from __future__ import annotations
 
+import os
 import textwrap
 
 from ..config import DomainContext
@@ -61,20 +62,30 @@ class Assistant:
         self,
         kb: KnowledgeBase,
         domain: DomainContext,
-        model: str = "gemini-2.5-flash",
+        model: str | None = None,
         n_chunks: int = 6,
     ) -> None:
         self.kb = kb
         self.domain = domain
-        self.model = model
+        self._model = model or os.environ.get("KB_DEFAULT_MODEL", "gemini-2.5-flash")
         self.n_chunks = n_chunks
-        self.llm: LLMBackend = get_llm(model)
+        self.llm: LLMBackend = get_llm(self._model)
         # OpenAI-style {role, content} message history.
         self._history: list[dict] = []
         self._system = _SYSTEM_PROMPT_TEMPLATE.format(
             role_description=domain.qa_role_description.strip()
             or f"You are an expert in {domain.expert_field}."
         )
+
+    @property
+    def model(self) -> str:
+        return self._model
+
+    @model.setter
+    def model(self, value: str) -> None:
+        if value and value != self._model:
+            self._model = value
+            self.llm = get_llm(value)
 
     def ask(self, question: str, stream: bool = True) -> str:
         """Ask a question, optionally streaming. Returns the full answer."""

@@ -6,7 +6,125 @@ the web UI binds to `127.0.0.1` on the server and you tunnel to it from your
 laptop. Streamlit has no built-in auth; do **not** expose port 8501 directly to
 the public internet without putting nginx + basic-auth (or similar) in front.
 
+There are two deployment paths:
+
+- **Path A (Docker, recommended for Aliyun mainland)** — build the image
+  locally with bge-m3 baked in, transfer as a tarball, `docker load + run`.
+  Avoids the HuggingFace Hub flakiness on Aliyun mainland and gives you a
+  known-good artifact. See section [A](#path-a-docker-build-locally-ship-tarball).
+- **Path B (git clone + uv sync, original)** — server pulls the source and
+  installs deps. Faster initial cycle if HF and GitHub are both reachable.
+  Original 7-step recipe below.
+
 ---
+
+## Path A — Docker (build locally, ship tarball)
+
+### A.1 Prerequisites on your laptop
+
+Install Docker. On macOS we recommend **OrbStack** (faster, lower RAM than
+Docker Desktop, free for personal use):
+
+    brew install orbstack
+
+Or Docker Desktop:
+
+    brew install --cask docker
+
+Then start it once and confirm:
+
+    docker version
+
+### A.2 Build the image
+
+From the repo root:
+
+    ./scripts/docker-build.sh
+
+This:
+1. `docker build` — installs Python 3.12 + `uv sync` + bakes in the bge-m3
+   embedding model (~4 GB, so the model is fully offline-ready).
+2. `docker save` → `kb-core-latest.tar` (~3 GB compressed).
+
+You can tag a version:
+
+    ./scripts/docker-build.sh v1.0.0     # produces kb-core-v1.0.0.tar
+
+### A.3 Transfer to the server
+
+    rsync -avz --progress kb-core-latest.tar root@your-server:/root/
+
+    # And the project data (PDFs + structured/ + db/):
+    rsync -avz --progress \
+        data/projects/ \
+        root@your-server:/root/pichia-kb/data/projects/
+
+### A.4 Server-side: configure secrets
+
+    ssh root@your-server
+    mkdir -p /root/pichia-kb
+    # Build a .env file. On Aliyun mainland the critical line is
+    # KB_DEFAULT_MODEL=deepseek-chat (Gemini API is unreachable).
+    cat > /root/pichia-kb/.env <<'EOF'
+    DEEPSEEK_API_KEY=sk-...
+    KB_DEFAULT_MODEL=deepseek-chat
+    EOF
+    chmod 600 /root/pichia-kb/.env
+
+### A.5 Load + run
+
+    docker load -i /root/kb-core-latest.tar      # imports the image
+    docker images | grep kb-core                  # confirm it's there
+
+    docker run -d \
+        --name kb-core \
+        --restart unless-stopped \
+        -p 127.0.0.1:8501:8501 \
+        --env-file /root/pichia-kb/.env \
+        -v /root/pichia-kb/data:/app/data \
+        kb-core:latest
+
+Logs:
+
+    docker logs -f kb-core
+
+### A.6 Access from your laptop (SSH tunnel)
+
+    # On your laptop:
+    ssh -L 8501:localhost:8501 root@your-server
+    # Browser: http://localhost:8501
+
+### A.7 Update later
+
+When you push code changes:
+
+    # Locally:
+    git push
+    ./scripts/docker-build.sh v1.0.1
+    rsync -avz kb-core-v1.0.1.tar root@your-server:/root/
+
+    # On the server:
+    docker load -i /root/kb-core-v1.0.1.tar
+    docker stop kb-core && docker rm kb-core
+    docker run -d --name kb-core --restart unless-stopped \
+        -p 127.0.0.1:8501:8501 \
+        --env-file /root/pichia-kb/.env \
+        -v /root/pichia-kb/data:/app/data \
+        kb-core:v1.0.1
+
+### Known limits on Aliyun mainland (Docker path)
+
+| Feature | Works? | Why |
+|---|---|---|
+| 💬 Q&A | ✅ via DeepSeek | `KB_DEFAULT_MODEL=deepseek-chat` |
+| Browse pages (2/3/4/5/6) | ✅ | Read-only, no LLM needed |
+| 🔍 Vector search | ✅ | bge-m3 baked into image |
+| 🛠️ Schema Curator | ❌ | Gemini function-calling only |
+| `kb extract-figures` | ❌ | Vision still Gemini-only by default |
+
+---
+
+## Path B — git clone + uv sync (original)
 
 ## 0. Prerequisites on the server
 

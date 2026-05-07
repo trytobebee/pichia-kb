@@ -1,0 +1,34 @@
+# Virtual envs / caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Project data — mounted as volume at runtime, not baked into image
+data/
+
+# Local secrets (server provides its own .env via --env-file)
+.env
+
+# VCS / editor
+.git/
+.gitignore
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Built docker tarballs (would create recursive ballooning)
+*.tar
+*.tar.gz
+
+# Misc
+docs/
+README.md
+DEPLOY.md
