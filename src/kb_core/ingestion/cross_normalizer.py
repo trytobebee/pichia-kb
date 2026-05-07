@@ -31,6 +31,20 @@ _ENTITY_KEY: dict[str, str] = {
     "process_parameters": "parameter_name",
 }
 
+# Per-paper JSONs store entities under schema-derived keys (lowercased
+# class names, e.g. "expressionvectors"), but the registry preserves
+# legacy snake_case names for downstream stability. Map legacy → all
+# accepted source keys.
+_KEY_ALIASES: dict[str, list[str]] = {
+    "strains":            ["strains"],
+    "promoters":          ["promoters"],
+    "vectors":            ["vectors", "expressionvectors"],
+    "media":              ["media", "culturemediums", "culturemedia"],
+    "target_products":    ["target_products", "targetproducts"],
+    "analytical_methods": ["analytical_methods", "analyticalmethods"],
+    "process_parameters": ["process_parameters", "processparameters"],
+}
+
 # Entity types where LLM synonym clustering is worth the API call
 # (high name variation, mixed languages, abbreviations)
 _LLM_CLUSTER_TYPES = {"target_products", "analytical_methods", "promoters"}
@@ -64,10 +78,11 @@ def _collect(structured_dir: Path) -> dict[str, list[dict]]:
             data = json.load(f)
         entity_root = data.get("entities") if isinstance(data.get("entities"), dict) else data
         for etype in _ENTITY_KEY:
-            for entity in entity_root.get(etype, []):
-                e = dict(entity)
-                e["_paper"] = paper
-                collected[etype].append(e)
+            for source_key in _KEY_ALIASES.get(etype, [etype]):
+                for entity in entity_root.get(source_key, []):
+                    e = dict(entity)
+                    e["_paper"] = paper
+                    collected[etype].append(e)
     return dict(collected)
 
 

@@ -90,7 +90,7 @@ class Assistant:
             collected: list[str] = []
             for chunk in self.llm.stream_chat(
                 self._history, system=self._system,
-                temperature=0.2, max_tokens=4096,
+                temperature=0.2, max_tokens=8192,
             ):
                 print(chunk, end="", flush=True)
                 collected.append(chunk)
@@ -99,7 +99,7 @@ class Assistant:
         else:
             answer = self.llm.chat(
                 self._history, system=self._system,
-                temperature=0.2, max_tokens=4096,
+                temperature=0.2, max_tokens=8192,
             )
 
         self._history.append({"role": "assistant", "content": answer})
@@ -117,7 +117,7 @@ class Assistant:
         collected: list[str] = []
         for chunk in self.llm.stream_chat(
             self._history, system=self._system,
-            temperature=0.2, max_tokens=4096,
+            temperature=0.2, max_tokens=8192,
         ):
             collected.append(chunk)
             yield chunk

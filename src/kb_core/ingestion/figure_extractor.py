@@ -43,17 +43,33 @@ CONTEXT:
 - Surrounding text (experimental description and conclusions):
 {surrounding_text}
 
-A figure may contain MULTIPLE PANELS (sub-figures labeled A/B/C, (a)/(b)/(c),
-or laid out side-by-side without labels). You MUST emit ONE entry per
-panel under "panels". For figures with only one panel, return a single-
-element panels list with panel_label="".
+═══════════════════════════════════════════════════════════════════
+STEP 1 — COUNT THE PANELS BEFORE WRITING ANYTHING ELSE
+═══════════════════════════════════════════════════════════════════
+A figure often contains MULTIPLE PANELS = independent sub-plots packed
+into one image. Each panel has its own axes, data, and conclusion.
 
-For EACH panel, you MUST identify the x_axis and y_axis labels (this is
-how the data becomes meaningful — without axis labels the numbers are
-useless). Read them exactly as printed in the figure (Chinese or English).
-If a panel has dual y-axes (a primary y on the left and a secondary y
-on the right, e.g. yield vs OD600 in the same plot), fill in
-y_axis_secondary too.
+Panel cues to look for (any one is enough → it IS multi-panel):
+  • Letter labels: "A | B | C", "(a) (b) (c)", "Ⅰ Ⅱ", "甲 乙"
+  • Multiple distinct plot frames in the image (side-by-side, stacked,
+    or in a grid) — even WITHOUT labels
+  • Multiple separate axis pairs visible
+  • Caption mentions sub-parts: e.g. "图3 (A) ...; (B) ..."
+
+If you find N panels, your "panels" array MUST have exactly N entries —
+one per panel, each with its OWN x_axis, y_axis, data_points,
+observed_trend, etc. Never merge data from different panels into one
+panel's data_points (this destroys the per-panel column semantics
+downstream).
+
+For a SINGLE-panel figure: emit one entry with panel_label="".
+
+═══════════════════════════════════════════════════════════════════
+STEP 2 — FOR EACH PANEL, IDENTIFY AXES (READ AS PRINTED)
+═══════════════════════════════════════════════════════════════════
+Without axis labels the numbers are meaningless. Read them exactly as
+printed (Chinese or English). If a panel has dual y-axes (primary left
++ secondary right, e.g. yield vs OD600), fill in y_axis_secondary too.
 
 Return a JSON object with this exact shape:
 
@@ -119,6 +135,32 @@ Return a JSON object with this exact shape:
 IMPORTANT extraction rules:
 - ENUMERATE EVERY PANEL. A figure with 2 panels MUST produce 2 entries
   in "panels". Do not collapse them into one panel.
+
+  WRONG (panels merged — DO NOT do this):
+    "panels": [{{
+      "panel_label": "A+B",
+      "data_points": [
+        {{"conditions": {{"x": "0h"}}, "values": {{"OD600": 5.2}}}},
+        {{"conditions": {{"x": "Strain1"}}, "values": {{"yield_g_per_L": 1.8}}}}
+      ]
+    }}]
+
+  RIGHT (panel A and panel B kept separate):
+    "panels": [
+      {{
+        "panel_label": "A",
+        "x_axis": {{"label": "Time", "unit": "h"}},
+        "y_axis": {{"label": "OD600", "unit": ""}},
+        "data_points": [{{"conditions": {{"x": "0h"}}, "values": {{"OD600": 5.2}}}}]
+      }},
+      {{
+        "panel_label": "B",
+        "x_axis": {{"label": "Strain", "unit": ""}},
+        "y_axis": {{"label": "Yield", "unit": "g/L"}},
+        "data_points": [{{"conditions": {{"x": "Strain1"}}, "values": {{"yield_g_per_L": 1.8}}}}]
+      }}
+    ]
+
 - READ AXIS LABELS EXACTLY AS PRINTED (do not invent or shorten them).
   If you cannot read a label, return an empty string — do not guess.
 - For bar charts: one data_point per bar; conditions = {{x: bar_label,
@@ -447,9 +489,9 @@ class FigureExtractor:
             caption=caption,
             surrounding_text=surrounding_text[:2000],
             section=None,
-            fixed_conditions=data.get("fixed_conditions", {}),
+            fixed_conditions=data.get("fixed_conditions") or {},
             panels=panels,
-            interpolation_range=data.get("interpolation_range"),
+            interpolation_range=data.get("interpolation_range") or {},
             author_conclusion=data.get("author_conclusion"),
             industrial_note=data.get("industrial_note"),
         )

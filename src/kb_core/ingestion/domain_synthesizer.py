@@ -142,14 +142,32 @@ class DomainKnowledgeSynthesizer:
         print(f"  Synthesizing domain knowledge from {len(pdfs)} papers "
               f"({len(papers_content):,} chars)...")
 
-        try:
-            data = self.llm.chat_json(
-                prompt, system=self._system,
-                temperature=0.1, max_tokens=16384,
-            )
-        except Exception as e:
-            print(f"  [warn] domain synthesis failed: {type(e).__name__}: {e}", file=sys.stderr)
-            data = {}
+        import time
+        last_err: Exception | None = None
+        data: dict = {}
+        for attempt in range(1, 4):
+            try:
+                data = self.llm.chat_json(
+                    prompt, system=self._system,
+                    temperature=0.1, max_tokens=32768,
+                )
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                print(f"  [warn] attempt {attempt}/3 failed: {type(e).__name__}: {e}",
+                      file=sys.stderr)
+                if attempt < 3:
+                    backoff = 30 * attempt  # 30s, 60s
+                    print(f"  [info] sleeping {backoff}s before retry...",
+                          file=sys.stderr)
+                    time.sleep(backoff)
+
+        if last_err is not None:
+            raise RuntimeError(
+                f"domain synthesis failed after 3 attempts: "
+                f"{type(last_err).__name__}: {last_err}"
+            ) from last_err
 
         data["synthesis_date"] = str(date.today())
         data["papers_analyzed"] = [p.name for p in pdfs]

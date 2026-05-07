@@ -769,8 +769,9 @@ def extract_figures(
 
         by_type: dict[str, int] = {}
         for fd in figs:
-            t = fd.figure_type
-            by_type[t] = by_type.get(t, 0) + 1
+            for panel in (getattr(fd, "panels", []) or []):
+                t = getattr(panel, "figure_type", None) or "other"
+                by_type[t] = by_type.get(t, 0) + 1
         type_str = "  ".join(f"{t}={n}" for t, n in sorted(by_type.items()))
         console.print(f"  [green]Saved {saved} figures.[/green]  {type_str}")
 
