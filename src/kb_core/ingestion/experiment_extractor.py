@@ -36,12 +36,55 @@ includes the construct / setup (scale, medium, inoculum), the parameters of each
 phase, the reported outcome (max yield, biomass, time-to-peak), and a back-reference
 to any figures whose curves quantify this experiment.
 
-Multiple distinct experiments commonly appear (screening, scale-up, parameter sweeps,
-etc.). Each is its own ExperimentRun. Do NOT merge experiments that differ in any
-varied parameter.
+═══════════════════════════════════════════════════════════════════
+GRANULARITY RULE — what counts as ONE experiment
+═══════════════════════════════════════════════════════════════════
+ONE experiment = ONE fermentation run with a unique parameter snapshot.
+Do NOT collapse multiple runs into a single "experimental stage".
 
-Papers may be in Chinese or English. Free-text field values MUST MATCH the source paper's language (do NOT translate Chinese paper content into English). Keep technical names exactly as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
-Return ONLY valid JSON. Be quantitative. If a value is not stated, use null or [].
+A 60-100 page thesis-style paper typically yields 8-15 experiments:
+  - each signal peptide variant tested  → one experiment per variant
+  - each copy number tested             → one experiment per copy number
+  - each induction temperature/pH tested→ one experiment per setpoint
+  - each scale-up step (shake-flask → bioreactor → fed-batch)  → one each
+  - each strain rebuild with new genetic mod  → one experiment
+
+ANTI-PATTERN — do NOT do any of these:
+  ✗ Merging "induction time optimization + purification + characterization"
+    into one experiment. Time optimization is its OWN experiment(s);
+    purification is operations on the product, not a fermentation run.
+  ✗ Using "experimental stage" or "chapter" as the experiment unit.
+    A single thesis chapter often contains 3-5 distinct fermentation runs.
+  ✗ Lumping a parameter sweep (e.g. 5 different methanol concentrations)
+    into a single experiment. Each setpoint is a separate run.
+
+If you find yourself emitting fewer than 5 experiments for a 50+ page
+thesis-style paper, re-read the methods/results sections and split.
+For genuinely short papers (e.g. ≤ 20 pages) or pure reviews, fewer
+or zero experiments is fine — record that in extraction_notes.
+
+═══════════════════════════════════════════════════════════════════
+LANGUAGE RULE — write in the paper's language
+═══════════════════════════════════════════════════════════════════
+Papers in this project are in CHINESE. ALL free-text field values
+(title, description, goal.summary, notes, etc.) MUST be written in
+Chinese. Do NOT translate the paper's Chinese content into English.
+
+Keep technical names exactly as printed:
+  - strain IDs (GS115, X-33, SMD1168)
+  - vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1, hlCOLIII)
+  - units (g/L, °C, vvm, h)
+  - chemical abbreviations (PTM1, BSM, BMGY)
+
+Examples of correct free-text style:
+  ✅ title: "10 拷贝菌株摇瓶诱导优化"
+  ✅ description: "在 BMMY 培养基中比较不同甲醇浓度对 hlCOLIII 表达量的影响"
+  ✅ goal.summary: "确定最佳诱导温度"
+  ❌ title: "Methanol Concentration Optimization for hlCOLIII Expression"
+  ❌ description: "This experiment compared..."
+
+Return ONLY valid JSON. Be quantitative. If a value is not stated,
+use null or [].
 """).strip()
 
 
