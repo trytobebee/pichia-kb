@@ -163,8 +163,19 @@ IMPORTANT extraction rules:
 
 - READ AXIS LABELS EXACTLY AS PRINTED (do not invent or shorten them).
   If you cannot read a label, return an empty string — do not guess.
-- For bar charts: one data_point per bar; conditions = {{x: bar_label,
-  series: dataset_name (if multiple series)}}
+- For bar charts: ALWAYS count groups visually FIRST, label-mapping SECOND.
+  Step 1: Count distinct bar GROUPS along x — a group is one cluster of
+    bars at one x-position (one bar if single-series, multiple stacked /
+    side-by-side bars if multi-series). DO NOT use the count of x-axis
+    text labels as the group count, because crowded labels may visually
+    merge into fewer apparent labels than there are real groups.
+  Step 2: Now map each group to its x-axis label. If you cannot resolve
+    a label (text too crammed / overlapping), still emit the group with
+    panel_label="?" or x="group_N" rather than dropping it.
+  Step 3: Within each group, one data_point per bar. conditions =
+    {{x: <group_label>, series: <dataset_name if multi-series>}}.
+  E.g. 6 groups × 2 series = 12 data_points, even if you can only
+  cleanly read 5 of the 6 x-labels.
 - For line curves: extract all visible data points along each curve.
   If multiple curves, include the series name in conditions.
 - For SDS-PAGE: describe band pattern as data_points with lane labels
