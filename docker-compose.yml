@@ -13,8 +13,12 @@ services:
     container_name: kb-core
     restart: unless-stopped
     ports:
-      # Bind to loopback only — reach via SSH tunnel from your laptop.
-      - "127.0.0.1:8501:8501"
+      # ⚠️ Bound to 0.0.0.0 for demo / colleague access. Streamlit has no
+      # built-in auth, so this means ANYONE who can reach the host on TCP
+      # 8501 can use the app and (indirectly) burn your LLM API quota.
+      # Switch back to "127.0.0.1:8501:8501" once the demo window ends, or
+      # put nginx + basic auth in front (see DEPLOY.md §6).
+      - "8501:8501"
     env_file:
       - .env
     volumes:
