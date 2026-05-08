@@ -162,15 +162,21 @@ class LineageExtractor:
             try:
                 data = self.llm.chat_json(
                     prompt, system=self._system,
-                    temperature=0.1, max_tokens=8192,
+                    temperature=0.1, max_tokens=16384,
                 )
                 break
             except Exception as e:
                 last_err = e
                 msg = str(e)
+                # Retry on transient overload / rate-limit / 5xx, AND on
+                # JSON parse failures (LLM output truncated / malformed —
+                # a fresh sample usually succeeds).
                 transient = ("503" in msg or "UNAVAILABLE" in msg
                              or "429" in msg or "RESOURCE_EXHAUSTED" in msg
-                             or "500" in msg or "DEADLINE_EXCEEDED" in msg)
+                             or "500" in msg or "DEADLINE_EXCEEDED" in msg
+                             or "Expecting" in msg or "Unterminated" in msg
+                             or "delimiter" in msg or "JSONDecode" in msg
+                             or "Invalid \\\\escape" in msg)
                 if not transient or attempt == 4:
                     print(
                         f"  [warn] lineage API call failed for {paper_exps.source_file}: "
