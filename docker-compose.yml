@@ -1,0 +1,21 @@
+# Run: `docker compose up -d`     (start in background)
+#      `docker compose logs -f`   (tail logs)
+#      `docker compose down`      (stop + remove)
+#      `docker compose pull`      (after `docker load -i kb-core-XXX.tar` of a new tarball, then `up -d` again to restart with the new image)
+#
+# Expects, in the same directory as this file:
+#   .env                       — DEEPSEEK_API_KEY=…  KB_DEFAULT_MODEL=deepseek-v4-flash
+#   data/projects/<slug>/…     — your project data (mounted as a volume)
+
+services:
+  kb-core:
+    image: kb-core:latest
+    container_name: kb-core
+    restart: unless-stopped
+    ports:
+      # Bind to loopback only — reach via SSH tunnel from your laptop.
+      - "127.0.0.1:8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
