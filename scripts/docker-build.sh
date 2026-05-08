@@ -15,8 +15,14 @@ OUT="kb-core-${TAG}.tar"
 
 cd "$(dirname "$0")/.."
 
-echo "🔨 Building ${IMAGE} ..."
-docker build -t "${IMAGE}" .
+# Force linux/amd64 because:
+# 1. Most Aliyun ECS / general cloud Linux is x86_64; arm64 images won't run.
+# 2. The PyTorch CPU wheel index only ships x86_64 wheels; on arm64 the slim
+#    swap silently falls back to the CUDA-bundled wheel.
+# Builds via QEMU emulation when host is Apple Silicon — slower (~30-45 min)
+# but produces a deployable image.
+echo "🔨 Building ${IMAGE} (linux/amd64) ..."
+docker build --platform=linux/amd64 -t "${IMAGE}" .
 
 echo "📦 Saving to ${OUT} ..."
 docker save "${IMAGE}" -o "${OUT}"

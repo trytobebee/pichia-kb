@@ -1,3 +1,6 @@
+# Docker tarballs (output of scripts/docker-build.sh)
+kb-core-*.tar
+
 # env / secrets
 .env
 

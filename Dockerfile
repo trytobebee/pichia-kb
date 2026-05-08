@@ -33,7 +33,20 @@ WORKDIR /app
 COPY pyproject.toml uv.lock .python-version ./
 
 # Install Python deps into /app/.venv. --no-dev skips pytest etc.
-RUN uv sync --frozen --no-dev
+# Then strip the CUDA stack (we only do CPU embedding inference):
+#   • Replace CUDA-bundled torch wheel (~884 MB) with the CPU-only wheel
+#     (~200 MB) from PyTorch's CPU index.
+#   • Delete the nvidia/* CUDA libs (~2.8 GB) and triton (~600 MB GPU compiler).
+# Net saving: ~4 GB out of the venv.
+ENV VIRTUAL_ENV=/app/.venv
+RUN uv sync --frozen --no-dev \
+ && uv pip uninstall torch \
+ && uv pip install --no-deps --no-cache \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch \
+ && rm -rf /app/.venv/lib/python3.12/site-packages/nvidia \
+           /app/.venv/lib/python3.12/site-packages/triton \
+           /root/.cache/uv /tmp/*
 
 # Copy source after deps so code edits don't bust the deps layer.
 COPY src ./src
@@ -41,10 +54,25 @@ COPY web ./web
 COPY scripts ./scripts
 
 # Pre-download bge-m3 into the image so first run does not need HF Hub.
-# This is ~4 GB. The whole image ends up ~5-6 GB; docker-save tarball ~3 GB.
+# allow_patterns excludes pytorch_model.bin (~2.2 GB duplicate of safetensors)
+# and the onnx/ folder. We keep the safetensors + tokenizer + configs only.
 ENV HF_HOME=/app/.hf_cache
-RUN uv run python -c "from sentence_transformers import SentenceTransformer; \
-    SentenceTransformer('BAAI/bge-m3', cache_folder='/app/.hf_cache/hub')"
+# Use the venv python directly — `uv run` would re-sync from the lockfile and
+# undo our CPU-torch swap (lockfile pins torch==2.11.0 from PyPI = CUDA build).
+#
+# Strategy: snapshot_download with ignore_patterns (skip pytorch_model.bin
+# duplicate + ONNX variants). Then SentenceTransformer.encode() acts as a
+# load-test — if any required file is missing, build fails here, not at
+# runtime in production.
+RUN /app/.venv/bin/python -c "\
+from huggingface_hub import snapshot_download; \
+snapshot_download('BAAI/bge-m3', cache_dir='/app/.hf_cache/hub', \
+    ignore_patterns=['pytorch_model.bin', 'onnx/*', '*.onnx', \
+                     'colbert_linear.pt', 'sparse_linear.pt']); \
+from sentence_transformers import SentenceTransformer; \
+m = SentenceTransformer('BAAI/bge-m3', cache_folder='/app/.hf_cache/hub'); \
+v = m.encode(['build-time check']); \
+print(f'bge-m3 OK: encoded shape={v.shape}')"
 
 # At runtime, prevent any HF Hub network calls (model is local).
 ENV HF_HUB_OFFLINE=1 \
@@ -59,5 +87,10 @@ ENV STREAMLIT_SERVER_HEADLESS=true \
 
 EXPOSE 8501
 
+# Make venv binaries first on PATH, so `streamlit`, `kb`, `python` resolve to
+# /app/.venv/bin/* without needing `uv run` (which would auto-re-sync from
+# the lockfile and undo the CPU-torch swap).
+ENV PATH="/app/.venv/bin:${PATH}"
+
 # Default: launch the web UI. Override with `docker run ... kb <cmd>` for CLI.
-CMD ["uv", "run", "streamlit", "run", "web/Home.py"]
+CMD ["streamlit", "run", "web/Home.py"]
