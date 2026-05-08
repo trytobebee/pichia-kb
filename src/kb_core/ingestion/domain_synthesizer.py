@@ -101,9 +101,9 @@ Return a JSON object with exactly these keys:
     }}
   ],
 
-  "field_maturity": "one paragraph assessment of how mature this field is",
-  "industrialization_readiness": "assessment of readiness for industrial scale-up",
-  "key_open_questions": ["question 1", "question 2", ...]
+  "field_maturity": "用中文写一段对该领域成熟度的评估(papers 是中文则此处也用中文)",
+  "industrialization_readiness": "用中文评估工业放大就绪程度(papers 是中文则此处也用中文)",
+  "key_open_questions": ["待解决的开放问题 1(中文)", "...", ...]
 }}
 
 PAPERS:
