@@ -1,25 +1,42 @@
+# Two-service stack:
+#   kb-core  — Streamlit app, only reachable inside the docker network
+#   nginx    — public entry point on port 80, basic-auth + websocket-aware
+#              reverse proxy to kb-core
+#
 # Run: `docker compose up -d`     (start in background)
-#      `docker compose logs -f`   (tail logs)
+#      `docker compose logs -f`   (tail logs from both services)
 #      `docker compose down`      (stop + remove)
-#      `docker compose pull`      (after `docker load -i kb-core-XXX.tar` of a new tarball, then `up -d` again to restart with the new image)
 #
 # Expects, in the same directory as this file:
 #   .env                       — DEEPSEEK_API_KEY=…  KB_DEFAULT_MODEL=deepseek-v4-flash
-#   data/projects/<slug>/…     — your project data (mounted as a volume)
+#   nginx.conf                 — nginx reverse-proxy config (in repo)
+#   .htpasswd                  — basic-auth users (generate on server, see DEPLOY.md)
+#   data/projects/<slug>/…     — project data (mounted as a volume)
+#
+# Aliyun security group: open TCP 80; close TCP 8501 (it's no longer reachable
+# from the host anyway because kb-core uses `expose:` not `ports:`).
 
 services:
   kb-core:
     image: kb-core:latest
     container_name: kb-core
     restart: unless-stopped
-    ports:
-      # ⚠️ Bound to 0.0.0.0 for demo / colleague access. Streamlit has no
-      # built-in auth, so this means ANYONE who can reach the host on TCP
-      # 8501 can use the app and (indirectly) burn your LLM API quota.
-      # Switch back to "127.0.0.1:8501:8501" once the demo window ends, or
-      # put nginx + basic auth in front (see DEPLOY.md §6).
-      - "8501:8501"
+    # No `ports:` — only nginx (in the same network) can reach 8501.
+    expose:
+      - "8501"
     env_file:
       - .env
     volumes:
       - ./data:/app/data
+
+  nginx:
+    image: nginx:alpine
+    container_name: kb-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./.htpasswd:/etc/nginx/.htpasswd:ro
+    depends_on:
+      - kb-core

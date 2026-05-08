@@ -1,6 +1,9 @@
 # Docker tarballs (output of scripts/docker-build.sh)
 kb-core-*.tar
 
+# nginx basic-auth users — generated per-deploy, never commit
+.htpasswd
+
 # env / secrets
 .env
 
