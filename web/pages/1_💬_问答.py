@@ -35,7 +35,8 @@ with st.sidebar:
     import os
     _default = os.environ.get("KB_DEFAULT_MODEL", "gemini-2.5-flash")
     _opts = [_default] + [
-        m for m in ("gemini-2.5-flash", "gemini-2.5-pro", "deepseek-chat", "deepseek-reasoner")
+        m for m in ("gemini-2.5-flash", "gemini-2.5-pro",
+                    "deepseek-v4-flash", "deepseek-reasoner")
         if m != _default
     ]
     model = st.selectbox("模型", _opts, index=0)

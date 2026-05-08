@@ -64,10 +64,10 @@ You can tag a version:
     ssh root@your-server
     mkdir -p /root/pichia-kb
     # Build a .env file. On Aliyun mainland the critical line is
-    # KB_DEFAULT_MODEL=deepseek-chat (Gemini API is unreachable).
+    # KB_DEFAULT_MODEL=deepseek-v4-flash (Gemini API is unreachable).
     cat > /root/pichia-kb/.env <<'EOF'
     DEEPSEEK_API_KEY=sk-...
-    KB_DEFAULT_MODEL=deepseek-chat
+    KB_DEFAULT_MODEL=deepseek-v4-flash
     EOF
     chmod 600 /root/pichia-kb/.env
 
@@ -116,7 +116,7 @@ When you push code changes:
 
 | Feature | Works? | Why |
 |---|---|---|
-| 💬 Q&A | ✅ via DeepSeek | `KB_DEFAULT_MODEL=deepseek-chat` |
+| 💬 Q&A | ✅ via DeepSeek | `KB_DEFAULT_MODEL=deepseek-v4-flash` |
 | Browse pages (2/3/4/5/6) | ✅ | Read-only, no LLM needed |
 | 🔍 Vector search | ✅ | bge-m3 baked into image |
 | 🛠️ Schema Curator | ❌ | Gemini function-calling only |
@@ -327,9 +327,9 @@ out of the box (OpenAI-compatible API, accessible from mainland China):
 3. Use a DeepSeek model id in CLI calls (or set as default in your
    workflow scripts):
    ```bash
-   kb ingest paper.pdf --project foo --model deepseek-chat
-   kb ask "..." --project foo --model deepseek-chat
-   kb review --project foo --model deepseek-chat
+   kb ingest paper.pdf --project foo --model deepseek-v4-flash
+   kb ask "..." --project foo --model deepseek-v4-flash
+   kb review --project foo --model deepseek-v4-flash
    ```
 4. Limitations: `kb extract-figures` (vision) and the 🛠️ Schema Curator
    web page still need Gemini. If you must keep both on the same server
