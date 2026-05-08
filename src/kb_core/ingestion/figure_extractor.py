@@ -27,7 +27,7 @@ You are an expert in {field_summary} and experimental data analysis.
 Your task is to extract ALL quantitative information from a research figure or table,
 structured so that an engineer can select process parameters from it.
 
-Papers may be in Chinese or English. Extract everything regardless of language.
+Papers may be in Chinese or English. Free-text field values MUST MATCH the source paper's language (do NOT translate Chinese paper content into English). Keep technical names exactly as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
 Return ONLY valid JSON matching the schema provided. Be as quantitative as possible.
 If exact values cannot be read, give your best estimate and note the uncertainty.
 """).strip()

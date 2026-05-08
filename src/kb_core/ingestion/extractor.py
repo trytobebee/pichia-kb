@@ -28,6 +28,10 @@ paper text.
 
 The papers may be written in Chinese, English, or both. Extract ALL relevant entities
 regardless of language. Be precise and faithful to the source text.
+Free-text field values (notes, descriptions, conclusions) MUST MATCH the source paper's language
+(do NOT translate Chinese paper content into English). Keep technical names as printed:
+strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1),
+units (g/L, °C, vvm), and chemical abbreviations.
 Return ONLY valid JSON — no explanation, no markdown fences.
 If a field value is not mentioned, omit it or use null.
 """).strip()

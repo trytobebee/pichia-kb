@@ -23,7 +23,7 @@ Your task is to read research paper content and extract actionable control knowl
 the principles, protocols, and quality factors that help engineers control process
 outcomes (product yield, structure, modification, activity).
 
-Papers may be in Chinese or English. Extract knowledge regardless of language.
+Papers may be in Chinese or English. Free-text field values MUST MATCH the source paper's language (do NOT translate Chinese paper content into English). Keep technical names exactly as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
 Return ONLY valid JSON. Be specific and quantitative wherever the text supports it.
 """).strip()
 

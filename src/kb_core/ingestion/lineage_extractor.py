@@ -39,6 +39,8 @@ fixed_parameters citing earlier results, or sequential section numbering with a
 clear continuation) is clear. Do NOT invent fully linear chains; independent
 parallel experiments should remain disconnected.
 
+Free-text field values (summary, rationale, etc.) MUST MATCH the source paper's language — write in Chinese if the paper is in Chinese; do NOT translate. Keep technical names (strain IDs, vector / promoter / gene symbols, units) as printed.
+
 Return ONLY valid JSON.
 """).strip()
 

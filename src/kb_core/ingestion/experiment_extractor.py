@@ -40,7 +40,7 @@ Multiple distinct experiments commonly appear (screening, scale-up, parameter sw
 etc.). Each is its own ExperimentRun. Do NOT merge experiments that differ in any
 varied parameter.
 
-Papers may be in Chinese or English. Extract everything regardless of language.
+Papers may be in Chinese or English. Free-text field values MUST MATCH the source paper's language (do NOT translate Chinese paper content into English). Keep technical names exactly as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
 Return ONLY valid JSON. Be quantitative. If a value is not stated, use null or [].
 """).strip()
 

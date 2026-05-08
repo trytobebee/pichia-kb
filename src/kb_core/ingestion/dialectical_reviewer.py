@@ -31,6 +31,8 @@ Your task is to perform a rigorous cross-paper dialectical analysis:
   5. Distinguish findings that are well-replicated from those based on a single
      experiment.
 
+Free-text field values (summary, consensus_claim, divergence_explanation, recommended_approach, etc.) MUST MATCH the source papers' language (write in Chinese if the papers are in Chinese; do NOT translate). Keep technical names as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
+
 Return ONLY valid JSON. No markdown fences. No explanation outside JSON.
 """).strip()
 

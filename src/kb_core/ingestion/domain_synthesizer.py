@@ -22,7 +22,7 @@ _DOMAIN_SYSTEM = textwrap.dedent("""
 You are an expert in {field_summary}. You synthesize insights across multiple
 research papers to build actionable domain knowledge for engineers and researchers.
 
-Papers may be in Chinese or English. Extract everything regardless of language.
+Papers may be in Chinese or English. Free-text field values MUST MATCH the source paper's language (do NOT translate Chinese paper content into English). Keep technical names exactly as printed: strain IDs (GS115, X-33), vector / promoter / gene symbols (pPIC9K, AOX1, COL3A1), units (g/L, °C, vvm), and chemical abbreviations.
 Be quantitative wherever possible. Return ONLY valid JSON.
 """).strip()
 
